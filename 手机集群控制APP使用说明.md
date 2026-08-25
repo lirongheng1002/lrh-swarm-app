@@ -29,11 +29,37 @@
 
 ## 二、装 APP（两种方式）
 
-### 方式 A：GitHub Actions 云端打包（推荐，本机零安装）
-1. 把本项目（`swarm-mobile` 整个目录）推到您的 GitHub 仓库（main 分支）；
-2. 仓库 Actions 自动开始 `build-apk` 工作流，几分钟后产出 **LRH集群控制-apk** 工件；
-3. 工件页下载 `*.apk` 传到手机安装（首次安装需允许"未知来源"）。
-> 手动也可以：Actions → build-apk → Run workflow。
+### 方式 A：GitHub Actions 云端打包（推荐，本机零安装——网页上传，不用装 Git）
+
+**第 1 步：建一个空仓库**
+1. 浏览器打开 <https://github.com>（没账号先免费注册并登录）；
+2. 点右上角 `+` → `New repository`；
+3. 仓库名填英文（如 `lrh-swarm-mobile`），Public / Private 均可；
+4. **三个勾选框（Add a README / Add .gitignore / Choose a license）都不要勾**——保持空仓库；
+5. 点绿色 `Create repository`。
+
+**第 2 步：网页上传全部文件**
+1. 进入刚建好的空仓库页，页面上方工具栏点 **`Add file`**（带下拉箭头）→ **`Upload files`**；
+2. 在电脑上打开 `D:\桌面\LRH手机集群控制APP` 文件夹；
+3. **用鼠标把整个文件夹拖进网页的拖放区**（拖动文件夹才会保留 `fonts`、`swarm_mobile`、`.github` 等子目录结构）；
+4. 网页列出待上传文件（共 23 个）：**必须确认列表里有 `.github` 目录**——它决定自动打包（拖文件夹会带隐藏文件；用「选择文件」对话框挑容易漏）；
+5. 底部 `Commit changes` 可填说明（如 `LRH手机集群控制 v1.0`），确认分支为 `main`，点绿色 `Commit changes`。
+
+> 兜底：若上传后仓库文件列表里**看不到 `.github`**，手动补建：`Add file` → `Create new file` → 文件名填 `.github/workflows/build-apk.yml` → 用记事本打开本目录同名文件全选复制粘贴 → `Commit new file`。
+
+**第 3 步：等云端自动打包**
+1. 上传完后点仓库上方 **`Actions`** 选项卡；
+2. 应看到 `build-apk` 工作流自动开跑（黄色转圈 → 绿色对勾，首次约 5~15 分钟）；
+3. 若 Actions 页空白：点 `build-apk` → `Run workflow` → 绿色按钮手动跑一次；
+4. 变绿后点该次运行 → 页面底部 **Artifacts 工件** 区 → 点 **`LRH集群控制-apk`** 下载 zip。
+
+**第 4 步：装到手机**
+1. 解压 zip 得到 `lrhswarm-1.0.0-arm64-v8a-*.apk`（主流手机都用 arm64 版）；
+2. 把 apk 发到手机（微信/QQ 文件、数据线均可）；
+3. 手机点安装 → 允许「未知来源」→ 完成；
+4. 打开 APP，服务器 `112.124.6.186 / 15551` 已预填，点「连接」即可。
+
+> 本机装 Git 后也可用桌面副本里的 `一键推送GitHub出APK.bat` 代替第 2 步（效果相同）。
 
 ### 方式 B：本机 WSL2 打包
 1. 安装 WSL2 + Ubuntu：`wsl --install -d Ubuntu`（装完按提示重启）；
