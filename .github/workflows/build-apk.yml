@@ -1,0 +1,41 @@
+name: build-apk
+
+# 云端打包 Android APK：把本项目推到 GitHub（默认 main 分支），
+# 或手动点 Actions -> build-apk -> Run workflow。
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 缓存 buildozer 工具链（SDK/NDK，二次构建免重下）
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-${{ runner.os }}
+
+      - name: 安装 Java + Buildozer 依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jdk python3-pip git zip unzip \
+            autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
+            libncursesw5-dev cmake libffi-dev libssl-dev
+          pip install --user buildozer cython
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: 打包 APK
+        run: |
+          buildozer android debug
+        env:
+          ANDROIDSDK_HOME: "${{ runner.workspace }}/.buildozer"
+
+      - name: 上传 APK 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: LRH集群控制-apk
+          path: bin/*.apk
