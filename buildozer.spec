@@ -12,8 +12,8 @@ version = 1.0.0
 
 # Python-for-android 依赖（pymavlink/pyyaml p4a 均有 recipe）
 requirements = python3,kivy,pymavlink,pyyaml
-# 固定 p4a 版本到与 buildozer 1.5.0 匹配的发布版（master 分支的 --dir 参数已移除）
-p4a.branch = v2024.1
+# 固定 p4a 到与 buildozer 1.5.0 同期（v2023.09.16：--dir 参数仍在、NDK 25b 匹配；新版 tag 已移除 --dir）
+p4a.branch = v2023.09.16
 
 orientation = portrait
 fullscreen = 0
