@@ -1,6 +1,6 @@
 """高德卫星地图（Kivy 纯控件，无额外依赖）
 
-- 瓦片源：webrd 高德瓦片，style=6 = 卫星图（瓦片为 GCJ-02 切片）
+- 瓦片源：webst 高德瓦片（卫星图专用域名！），style=6 = 卫星图（瓦片为 GCJ-02 切片）
 - 点击瓦片 → 反算经纬（GCJ -> WGS84）→ 回调 on_pick(lat, lng)
 - 3x3 网格，每瓦 size_hint=(1/3,1/3) 自动拉伸满屏——竖屏/横屏都铺满
 - 缩放 Slider（3~18）；中心默认=首在线机坐标，否则 config map 中心或默认
@@ -18,7 +18,7 @@ from kivy.graphics import Color, Rectangle
 from kivy.core.text import LabelBase
 
 # ---------------- 高德瓦片 ----------------
-_TILE_URL = 'https://webrd0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}'
+_TILE_URL = 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}'
 _SUB = ['1', '2', '3', '4']
 
 # ---------------- GCJ-02 / WGS-84 ----------------
