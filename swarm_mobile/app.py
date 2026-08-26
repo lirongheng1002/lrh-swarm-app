@@ -281,24 +281,18 @@ class SwarmMobileApp(App):
         body0.add_widget(self._build_formation())
         sv0.add_widget(body0)
 
-        # ---- 页② 单架飞机：单机操作（选机/状态/起飞/降落/解锁/上锁/返航/投弹/切模式）----
-        sv1 = ScrollView()
-        body1 = BoxLayout(orientation='vertical', spacing=8, padding=(4, 4),
-                          size_hint_y=None)
-        body1.bind(minimum_height=body1.setter('height'))
-        body1.add_widget(self._section_title('三、单机操作', (0.18, 0.4, 0.72, 1)))
+        # ---- 页② 单架飞机：内容量小，直接 BoxLayout 铺满（不套外层 ScrollView，
+        #      彻底避开安卓页面级滚动布局黑屏/空白）----
+        body1 = BoxLayout(orientation='vertical', spacing=8, padding=(6, 6))
+        body1.add_widget(self._section_title('单机操作（选机/起飞/降落/解锁/上锁/返航/投弹/切模式）',
+                                            (0.18, 0.4, 0.72, 1)))
         body1.add_widget(self._build_single())
-        sv1.add_widget(body1)
 
-        # ---- 页③ 任务航线：下载/上传/清除/地图设点/坐标换算/经纬输入/任务表 ----
-        sv2 = ScrollView()
-        body2 = BoxLayout(orientation='vertical', spacing=8, padding=(4, 4),
-                          size_hint_y=None)
-        body2.bind(minimum_height=body2.setter('height'))
-        body2.add_widget(self._section_title('任务航线（下载/上传/地图/坐标换算/航点）',
+        # ---- 页③ 任务航线：同②，直接 BoxLayout 铺满（任务表 200dp 滚动保留为唯一内层）----
+        body2 = BoxLayout(orientation='vertical', spacing=8, padding=(6, 6))
+        body2.add_widget(self._section_title('任务航线（下载/上传/地图设点/坐标换算/航点）',
                                             (0.18, 0.4, 0.72, 1)))
         body2.add_widget(self._build_mission())
-        sv2.add_widget(body2)
 
         # ---- 页③ 运行日志（单独一栏，长按可选中复制 + 清空）----
         logbox3 = BoxLayout(orientation='vertical', spacing=6, padding=(4, 4))
@@ -312,7 +306,7 @@ class SwarmMobileApp(App):
         logbox3.add_widget(b_clear)
 
         # ---- 页面槽：固定区域，切页 = clear + add（安卓最稳，不重叠）----
-        self._pages = [sv0, sv1, sv2, logbox3]
+        self._pages = [sv0, body1, body2, logbox3]
         self._page_slot = BoxLayout(orientation='vertical')
         root.add_widget(self._page_slot)
         self._switch_page(0)
@@ -389,10 +383,10 @@ class SwarmMobileApp(App):
     def _build_formation(self):
         b = BoxLayout(orientation='vertical', spacing=6, size_hint_y=None)
         b.add_widget(self._mk_hbox([
-            Label(text='全队高度m', font_size='15sp', size_hint_x=0.4),
+            Label(text='全队高度m', font_size='15sp', size_hint_x=0.3),
             self._fm_alt_in(),
-            self._mk_btn('开始编队', OK, self._on_formation_start, size_hint_x=0.3),
-            self._mk_btn('暂停编队', DANGER, self._on_formation_stop, size_hint_x=0.3),
+            self._mk_btn('开始编队', OK, self._on_formation_start, size_hint_x=0.2),
+            self._mk_btn('暂停编队', DANGER, self._on_formation_stop, size_hint_x=0.2),
         ]))
         b.add_widget(self._mk_hbox([
             Label(text='前/左右/小组 m', font_size='15sp', size_hint_x=0.44),
@@ -413,7 +407,7 @@ class SwarmMobileApp(App):
 
     def _fm_alt_in(self):
         self._fm_alt = TextInput(text='30', font_size='17sp', multiline=False,
-                                 input_filter='float')
+                                 input_filter='float', size_hint_x=0.3)
         return self._fm_alt
 
     def _fm_alt_val(self):
