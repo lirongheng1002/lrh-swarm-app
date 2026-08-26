@@ -37,6 +37,7 @@ jobs:
 
       - name: 打包 APK（输出同时落盘 buildozer.log）
         run: |
+          set -o pipefail
           export PATH="$HOME/.local/bin:$PATH"
           buildozer android debug 2>&1 | tee buildozer.log
         shell: bash
