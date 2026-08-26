@@ -49,12 +49,14 @@ jobs:
       - name: 失败时提取完整日志为错误标注（方便 API 自查）
         if: failure()
         run: |
-          echo '::error::====== 文件检查 ======'
-          ls -la buildozer.log .buildozer 2>&1 | while IFS= read -r line; do echo "::error::$line"; done
-          echo '::error::====== buildozer.log 尾部（80行） ======'
-          tail -n 80 buildozer.log 2>/dev/null | while IFS= read -r line; do echo "::error::$line"; done
-          echo '::error::====== p4a 日志尾部 ======'
-          find .buildozer -name '*.log' 2>/dev/null | head -n 5 | while IFS= read -r f; do
+          echo '::error::====== .buildozer/buildozer.log 全文（buildozer 自写日志） ======'
+          tail -n 100 .buildozer/buildozer.log 2>/dev/null | while IFS= read -r line; do echo "::error::$line"; done
+          echo '::error::====== 工作区根 buildozer.log 尾部（40行） ======'
+          tail -n 40 buildozer.log 2>/dev/null | while IFS= read -r line; do echo "::error::$line"; done
+          echo '::error::====== .buildozer/android 结构 ======'
+          ls -R .buildozer/android 2>/dev/null | head -n 40 | while IFS= read -r line; do echo "::error::$line"; done
+          echo '::error::====== p4a 日志 ======'
+          find .buildozer -name '*.log' -not -name 'buildozer.log' 2>/dev/null | head -n 5 | while IFS= read -r f; do
             echo "::error::-- $f --"
             tail -n 20 "$f" 2>/dev/null | while IFS= read -r line; do echo "::error::$line"; done
           done
