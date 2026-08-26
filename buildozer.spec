@@ -25,7 +25,8 @@ android.minapi = 21
 android.ndk = 25b
 android.archs = arm64-v8a
 android.allow_backup = True
-android.private_storage = False
+# 必须 True：buildozer 据此传 --private（False 会传旧式 --dir，p4a 一律不认）
+android.private_storage = True
 android.enable_androidx = True
 android.accept_sdk_license = True
 android.add_src =
