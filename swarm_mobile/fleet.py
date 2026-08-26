@@ -143,6 +143,19 @@ class FleetApp:
                 n += 1
         return n
 
+    def set_speed_all(self, mps):
+        """全队航速：对每架在线机发 DO_CHANGE_SPEED"""
+        n = 0
+        for s in self.fleet:
+            v = self.fleet[s]
+            if getattr(v, 'online', False) and v.link:
+                try:
+                    commands.change_speed(v.link, s, mps)
+                    n += 1
+                except Exception:
+                    pass
+        return n
+
     def arm(self, sysid, on=True, force=False):
         return self._send(sysid, lambda b, s: commands.arm(b, s, on, force))
 

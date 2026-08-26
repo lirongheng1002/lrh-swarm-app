@@ -97,9 +97,18 @@ def _px_to_lat(y, z):
     return math.degrees(math.atan(math.sinh(math.pi * t)))
 
 
+# ---------------- 通用按钮（模块级，避免类内裸名 NameError 导致地图窗崩） ----------------
+def _mk_button(text, color, cb, **kw):
+    from kivy.uix.button import Button
+    b = Button(text=text, background_color=color, size_hint_y=None,
+               height='44dp', font_size='15sp', **kw)
+    b.bind(on_release=lambda *a: cb())
+    return b
+
+
 # ---------------- 单瓦片 ----------------
 class TileCell(AsyncImage):
-    """一格瓦片：记录自身瓦片号，点击时回调外部"""
+    """一格瓦片：记录自身瓦片号，点击时回调外部；加载失败换子域自动重试"""
     def __init__(self, tx=0, ty=0, z=15, on_tap=None, **kw):
         kw.setdefault('keep_ratio', False)
         kw.setdefault('allow_stretch', True)
@@ -109,11 +118,23 @@ class TileCell(AsyncImage):
         self._z = z
         self._on_tap = on_tap
         self._lbl = None
+        self._retry = -1
         self._refresh_source()
+        self.bind(on_error=self._on_tile_error)
+
+    def _tile_url(self, s):
+        return _TILE_URL.format(s=s, x=self._tx, y=self._ty, z=self._z)
 
     def _refresh_source(self):
         s = _SUB[(self._tx * 7 + self._ty) % 4]
-        self.source = _TILE_URL.format(s=s, x=self._tx, y=self._ty, z=self._z)
+        self.source = self._tile_url(s)
+
+    def _on_tile_error(self, *a):
+        # 换下一个子域重试（4 子域循环最多 8 次），避免单子域故障整图空白
+        self._retry += 1
+        if self._retry < 8:
+            s = _SUB[(self._tx * 7 + self._ty + self._retry) % 4]
+            self.source = self._tile_url(s)
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
@@ -125,9 +146,9 @@ class TileCell(AsyncImage):
 
 # ---------------- 卫星地图页 ----------------
 class MapPage(BoxLayout):
-    """全屏卫星地图：3x3 瓦片铺满（横竖屏自适应）+ 缩放滑条 + 关闭按钮"""
+    """卫星地图：3x3 瓦片铺满（横竖屏自适应）+ 缩放滑条 + 关闭按钮（embedded 内嵌版无关闭）"""
     def __init__(self, center=(31.2304, 121.4737), zoom=15, on_pick=None,
-                 on_close=None, **kw):
+                 on_close=None, embedded=False, **kw):
         kw.setdefault('orientation', 'vertical')
         kw.setdefault('spacing', 4)
         kw.setdefault('padding', 4)
@@ -136,38 +157,34 @@ class MapPage(BoxLayout):
         self._zoom = zoom
         self._on_pick = on_pick
         self._on_close = on_close
+        self._embedded = embedded
         self._grid = None
         self._cells = []
 
-        # 顶栏：坐标显示 + 缩放滑条 + 关闭
-        top = BoxLayout(orientation='horizontal', size_hint_y=None, height='46dp',
+        # 顶栏：坐标显示 + 缩放滑条（内嵌版无关闭按钮）
+        top = BoxLayout(orientation='horizontal', size_hint_y=None, height='42dp',
                         spacing=8, padding=(8, 4))
-        self._lbl_coord = Label(text='%.5f, %.5f' % center, size_hint_x=0.55,
+        self._lbl_coord = Label(text='%.5f, %.5f' % center, size_hint_x=0.6,
                                 font_size='15sp', halign='left')
-        self._slider = Slider(min=3, max=18, value=zoom, size_hint_x=0.35,
+        self._slider = Slider(min=3, max=18, value=zoom, size_hint_x=0.4,
                               step=1)
         self._slider.bind(value=self._on_zoom)
-        btn_close = _mk_button('关闭', (0.75, 0.28, 0.22, 1), self._do_close,
-                               size_hint_x=0.2)
         top.add_widget(self._lbl_coord)
         top.add_widget(self._slider)
-        top.add_widget(btn_close)
+        if not embedded:
+            top.add_widget(_mk_button('关闭', (0.75, 0.28, 0.22, 1),
+                                      self._do_close, size_hint_x=0.18))
+        else:
+            top.add_widget(Label(text='', size_hint_x=0.18))
         self.add_widget(top)
 
         self._hint = Label(text='点击地图任一点设为航点（卫星图，任意方向可用）',
-                           size_hint_y=None, height='30dp', font_size='13sp',
+                           size_hint_y=None, height='26dp', font_size='12sp',
                            color=(0.9, 0.85, 0.6, 1))
         self.add_widget(self._hint)
 
         self.bind(size=self._on_resize)
         self._rebuild()
-
-    def _mk_button(text, color, cb, **kw):
-        from kivy.uix.button import Button
-        b = Button(text=text, background_color=color, size_hint_y=None,
-                   height='44dp', font_size='15sp', **kw)
-        b.bind(on_release=lambda *a: cb())
-        return b
 
     def _on_zoom(self, inst, val):
         self._zoom = int(val)

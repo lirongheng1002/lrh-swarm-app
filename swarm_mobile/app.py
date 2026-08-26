@@ -288,10 +288,12 @@ class SwarmMobileApp(App):
                                             (0.18, 0.4, 0.72, 1)))
         body1.add_widget(self._build_single())
 
-        # ---- 页③ 任务航线：同②，直接 BoxLayout 铺满（任务表 200dp 滚动保留为唯一内层）----
-        body2 = BoxLayout(orientation='vertical', spacing=8, padding=(6, 6))
-        body2.add_widget(self._section_title('任务航线（下载/上传/地图设点/坐标换算/航点）',
-                                            (0.18, 0.4, 0.72, 1)))
+        # ---- 页③ 任务航线：上面=地图定位区（高德卫星图内嵌），下面=文本框/按钮/任务表 ----
+        body2 = BoxLayout(orientation='vertical', spacing=6, padding=(6, 6))
+        self._map_page = mapview.MapPage(center=self._map_default_center(),
+                                         zoom=14, embedded=True,
+                                         on_pick=self._on_map_pick_embed)
+        body2.add_widget(self._map_page)
         body2.add_widget(self._build_mission())
 
         # ---- 页③ 运行日志（单独一栏，长按可选中复制 + 清空）----
@@ -439,14 +441,15 @@ class SwarmMobileApp(App):
         b = BoxLayout(orientation='vertical', spacing=6, size_hint_y=None)
         top = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height=INPUT_H)
         self._sp_sys = Spinner(text='1号机', values=['%d号机' % i for i in range(1, 11)],
-                               font_size='17sp', size_hint_x=0.42)
+                               font_size='16sp', size_hint_x=0.36)
         self._sp_sys.bind(text=self._on_sys_changed)
-        self._lbl_veh = Label(text='未选择', font_size='15sp', halign='left', valign='middle')
+        self._lbl_veh = Label(text='未选择', font_size='15sp', halign='left', valign='middle',
+                              size_hint_x=0.64)
         top.add_widget(self._sp_sys)
         top.add_widget(self._lbl_veh)
         b.add_widget(top)
 
-        g = GridLayout(cols=2, spacing=6, size_hint_y=None, height='330dp')
+        g = GridLayout(cols=2, spacing=6, size_hint_y=None, height='300dp')
         g.add_widget(self._mk_btn('单机起飞', OK, lambda: self._confirm(
             '单机起飞', '%s 按 %s m 起飞？' % (self._sel_name(), self._tof_alt()),
             lambda: self._single_act('起飞', self.fleet.takeoff, self._tof_alt()))))
@@ -468,8 +471,10 @@ class SwarmMobileApp(App):
         mrow = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height=INPUT_H)
         self._sp_mode_one = Spinner(text='自动(3)', values=MODE_SPINNER_VALUES,
                                     font_size='15sp', size_hint_x=0.6)
+        self._sp_mode_one.bind(text=self._on_single_mode)   # 选中即切，无需再点按钮
         mrow.add_widget(self._sp_mode_one)
-        mrow.add_widget(self._mk_btn('本机切模式', ACCENT, self._on_single_mode, size_hint_x=0.4))
+        mrow.add_widget(Label(text='选中模式即切换', font_size='14sp',
+                              color=(0.6, 0.85, 0.6, 1), size_hint_x=0.4))
         g.add_widget(mrow)
         b.add_widget(g)
         return b
@@ -487,9 +492,14 @@ class SwarmMobileApp(App):
         self._sel_sys = self._sel_sysid()
         self._refresh_mission_table()
 
-    def _on_single_mode(self, _x):
+    def _on_single_mode(self, *a):
         mode = self._sp_mode_one_mode()
         self._single_act('切模式', self.fleet.set_mode, mode)
+
+    def _on_all_mode(self, *a):
+        mode = self._sp_mode_all_mode()
+        self._swarm_act('切模式→%s' % self._sp_mode_all.text,
+                        self.fleet.set_mode_all, mode)
 
     def _single_act(self, label, fn, *args):
         if not self.fleet.connected:
@@ -506,13 +516,13 @@ class SwarmMobileApp(App):
     def _build_mission(self):
         b = BoxLayout(orientation='vertical', spacing=6, size_hint_y=None)
         r1 = BoxLayout(orientation='horizontal', spacing=4, size_hint_y=None, height=INPUT_H)
-        r1.add_widget(self._mk_btn('下载任务', ACCENT, self._on_download_mission, size_hint_x=0.25))
+        r1.add_widget(self._mk_btn('下载任务', ACCENT, self._on_download_mission, size_hint_x=0.2))
         r1.add_widget(self._mk_btn('上传任务', ACCENT, lambda: self._confirm(
             '上传任务', '把当前任务（%d 条）写入 %s？' % (self._mission_len(), self._sel_name()),
-            self._on_upload_mission), size_hint_x=0.25))
-        r1.add_widget(self._mk_btn('清除任务', GRAY, self._on_clear_mission, size_hint_x=0.25))
-        r1.add_widget(self._mk_btn('地图设点', (0.15, 0.6, 0.35, 1), self._on_open_map,
-                                   size_hint_x=0.25))
+            self._on_upload_mission), size_hint_x=0.2))
+        r1.add_widget(self._mk_btn('读取航线', ACCENT, self._on_read_route, size_hint_x=0.2))
+        r1.add_widget(self._mk_btn('读取航点', ACCENT, self._on_read_wp, size_hint_x=0.2))
+        r1.add_widget(self._mk_btn('清除任务', GRAY, self._on_clear_mission, size_hint_x=0.2))
         b.add_widget(r1)
 
         r2 = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height=INPUT_H)
@@ -530,8 +540,12 @@ class SwarmMobileApp(App):
         b.add_widget(r2)
 
         r3 = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height=INPUT_H)
-        r3.add_widget(self._mk_btn('坐标换算（高斯X/Y→经纬回填）', (0.55, 0.4, 0.2, 1),
-                                   self._on_open_coord, size_hint_x=1.0))
+        r3.add_widget(self._mk_btn('全屏地图', (0.15, 0.6, 0.35, 1), self._on_open_map,
+                                   size_hint_x=0.3))
+        r3.add_widget(self._mk_btn('坐标换算', (0.55, 0.4, 0.2, 1), self._on_open_coord,
+                                   size_hint_x=0.3))
+        r3.add_widget(Label(text='上图为定位地图：点击取点、拖动/滑条缩放',
+                            font_size='13sp', color=(0.6, 0.85, 0.6, 1), size_hint_x=0.4))
         b.add_widget(r3)
 
         self._mission_scroll = ScrollView(size_hint_y=None, height='200dp')
@@ -579,6 +593,20 @@ class SwarmMobileApp(App):
         self._append_log('正在下载 %s 任务…' % self._sel_name())
         self.fleet.download_mission(self._sel_sysid())
 
+    def _on_read_route(self, _x):
+        if not self.fleet.connected:
+            self._append_log('未连接')
+            return
+        self._append_log('正在读取 %s 航线…' % self._sel_name())
+        self.fleet.download_mission(self._sel_sysid())
+
+    def _on_read_wp(self, _x):
+        if not self.fleet.connected:
+            self._append_log('未连接')
+            return
+        self._append_log('正在读取 %s 航点表…' % self._sel_name())
+        self.fleet.download_mission(self._sel_sysid())
+
     def _on_upload_mission(self):
         if not self.fleet.connected:
             self._append_log('未连接')
@@ -610,6 +638,22 @@ class SwarmMobileApp(App):
             return
         self.fleet.add_bomb_after(self._sel_sysid(), self._sel_seq)
         self._refresh_mission_table()
+
+    def _map_default_center(self):
+        """地图默认中心：首选首架在线机坐标，否则默认市区"""
+        for s in sorted(self.fleet.fleet):
+            v = self.fleet.fleet[s]
+            lat = getattr(v, 'lat', None)
+            lon = getattr(v, 'lon', None)
+            if getattr(v, 'online', False) and lat and lon and lat != 0:
+                return (lat, lon)
+        return (34.26, 108.94)
+
+    def _on_map_pick_embed(self, lat, lng):
+        """内嵌地图取点：直接回填经纬（常显，不关闭）"""
+        self._wp_lat.text = '%.6f' % lat
+        self._wp_lon.text = '%.6f' % lng
+        self._append_log('地图取点 %.6f, %.6f —— 填好高度后点「加航点」' % (lat, lng))
 
     def _on_open_map(self):
         """打开高德卫星地图：以首架在线机（或默认）为中心，点击取点"""
@@ -790,18 +834,20 @@ class SwarmMobileApp(App):
             bx.add_widget(w)
         return bx
 
-    def _swarm_act(self, label, fn, *args, **kw):
+    def _swarm_act(self, label, fn, *args):
         if not self.fleet.connected:
             self._append_log('未连接')
             return
         try:
-            n = fn(*args) if not kw else fn(*args, **kw)
-            if label == '切自动':
-                self._append_log('全部切 AUTO：各机执行各自任务')
-            elif label == '切模式':
-                self._append_log('%s' % kw.get('label', ''))
+            n = fn(*args)
+            online = sum(1 for s in self.fleet.fleet
+                         if getattr(self.fleet.fleet[s], 'online', False))
+            if label.startswith('切自动'):
+                self._append_log('全部切 AUTO：各机执行各自任务（%d 架；在线 %d/%d）'
+                                 % (n, online, len(self.fleet.fleet)))
             else:
-                self._append_log('全队%s：指令已发送 %d 架' % (label, n))
+                self._append_log('全队%s：指令已发送 %d 架（在线 %d/%d）'
+                                 % (label, n, online, len(self.fleet.fleet)))
         except Exception as e:
             self._append_log('全队%s 失败：%s' % (label, e))
 
