@@ -35,27 +35,34 @@ jobs:
           python3 --version
           buildozer --version
 
-      - name: 打包 APK（PTY 保真全量输出）
+      - name: 打包 APK（无缓冲输出保真）
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          script -qec "buildozer android debug" buildozer_pty.log < /dev/null
+          export PYTHONUNBUFFERED=1
+          pv=$(python3 --version 2>&1 | head -n1)
+          jv=$(java -version 2>&1 | head -n1)
+          echo "::error::ENV pwd=$(pwd) buildozer=$(command -v buildozer) python=$pv java=$jv"
+          stdbuf -oL -eL buildozer android debug 2>&1 | tee buildozer_pty.log > /dev/null
           code=$?
-          echo "BUILDOZER_EXIT=$code (0=成功)"
-          echo "--- buildozer_pty.log 尾部 3000 字节 ---"
-          tail -c 3000 buildozer_pty.log
+          echo "::error::BUILDOZER_EXIT=$code (0=成功)"
+          echo "::error::--- buildozer_pty.log 尾部 60 行 ---"
+          tail -n 60 buildozer_pty.log 2>/dev/null | while IFS= read -r line; do echo "::error::$line"; done
+          echo "::error::--- .buildozer 检查 ---"
+          ls -la .buildozer 2>/dev/null | while IFS= read -r line; do echo "::error::$line"; done
           exit $code
         shell: bash
 
       - name: 打包现场回传仓库（无论成败，成功时含 APK）
         if: always()
         run: |
-          tar czf ci_snapshot.tar.gz buildozer_pty.log bin .buildozer/buildozer.log 2>/dev/null || true
-          ls -la ci_snapshot.tar.gz 2>/dev/null || true
+          tar czf ci_snapshot.tar.gz buildozer_pty.log .buildozer/buildozer.log 2>/dev/null || tar czf ci_snapshot.tar.gz buildozer_pty.log 2>/dev/null
+          echo "::error::SNAPSHOT $(ls -la ci_snapshot.tar.gz 2>/dev/null | head -n1)"
           git config user.name "ci-bot"
           git config user.email "ci@github.local"
           git add ci_snapshot.tar.gz
-          git commit -m "ci: 打包现场回传 [skip ci]" || echo "无现场可回传"
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main 2>&1 | tail -3 || echo "回传推送失败"
+          git commit -m "ci: 打包现场回传 [skip ci]" || echo "::error::无现场可回传"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main 2>&1 | tail -n2 | while IFS= read -r line; do echo "::error::$line"; done
+          echo "::error::回传步骤结束"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
