@@ -77,10 +77,26 @@ class FleetApp:
             'vehicles': _veh_cfg_list(self.cfg),
         }
         self._reset_online_state()
-        self.bus = mavlink_bus.LinkBus(bus_cfg)
+        self.bus = mavlink_bus.LinkBus(bus_cfg, on_link=self._link_state)
         self.bus.start()
         self.connected = True
         self._log('已连接 %s:%s~%s' % (host, base_port, base_port + len(self.fleet) - 1))
+
+    def _link_state(self, sysid, ok, err):
+        """单个端口连接状态回调：失败原因进日志（带端口号）；成功由 tick 显示在线"""
+        if ok or not err:
+            return
+        port = ''
+        try:
+            lnk = self.bus.links.get(sysid)
+            if lnk:
+                port = str(lnk.port)
+        except Exception:
+            pass
+        if port:
+            self._log('[端口%s] %s' % (port, err))
+        else:
+            self._log('%s' % err)
 
     def disconnect(self):
         if self.bus is not None:

@@ -252,9 +252,19 @@ class SwarmMobileApp(App):
         self._sat_scroll.add_widget(self._sat_box)
         root.add_widget(top)
 
-        # ---- 两页（TabbedPanel）：①飞行操作 ②任务航线 —— 不重叠，各页独立滚动 ----
-        from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
-        tp = TabbedPanel(do_default_tab=False, tab_pos='top_mid', size_hint_y=1)
+        # ---- 三栏导航（顶部按钮切页；不用 TabbedPanel——安卓上其 content 尺寸 bug
+        #      导致切到第2栏后切不回/整页点不动，地图与航线窗口全无响应）----
+        nav = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height='48dp')
+        self._btn_p1 = Button(text='① 飞行操作', font_size='16sp', background_color=ACCENT)
+        self._btn_p2 = Button(text='② 任务航线', font_size='16sp')
+        self._btn_p3 = Button(text='③ 运行日志', font_size='16sp')
+        self._btn_p1.bind(on_release=lambda _x: self._switch_page(0))
+        self._btn_p2.bind(on_release=lambda _x: self._switch_page(1))
+        self._btn_p3.bind(on_release=lambda _x: self._switch_page(2))
+        nav.add_widget(self._btn_p1)
+        nav.add_widget(self._btn_p2)
+        nav.add_widget(self._btn_p3)
+        root.add_widget(nav)
 
         # ---- 页① 飞行操作：全队操作 + 队形编队 + 单机操作 ----
         sv1 = ScrollView()
@@ -268,9 +278,6 @@ class SwarmMobileApp(App):
         body1.add_widget(self._section_title('三、单机操作', (0.18, 0.4, 0.72, 1)))
         body1.add_widget(self._build_single())
         sv1.add_widget(body1)
-        t1 = TabbedPanelItem(text='① 飞行操作')
-        t1.content = sv1
-        tp.add_widget(t1)
 
         # ---- 页② 任务航线：下载/上传/清除/地图设点/坐标换算/经纬输入/任务表 ----
         sv2 = ScrollView()
@@ -281,20 +288,35 @@ class SwarmMobileApp(App):
                                             (0.18, 0.4, 0.72, 1)))
         body2.add_widget(self._build_mission())
         sv2.add_widget(body2)
-        t2 = TabbedPanelItem(text='② 任务航线')
-        t2.content = sv2
-        tp.add_widget(t2)
-        root.add_widget(tp)
 
-        # ---- 底部日志（两页共用常显，长按可选中复制）----
+        # ---- 页③ 运行日志（单独一栏，长按可选中复制 + 清空）----
+        logbox3 = BoxLayout(orientation='vertical', spacing=6, padding=(4, 4))
         self._lbl_log = TextInput(text='', readonly=True, font_size='15sp',
                                   background_color=(0.12, 0.14, 0.12, 1),
                                   foreground_color=(0.75, 0.85, 0.75, 1),
-                                  cursor_color=(0.9, 0.95, 0.9, 1),
-                                  size_hint_y=None, height='150dp', multiline=True)
-        # 只读输入框：长按可选中复制（领导要求日志可选中/导出）
-        root.add_widget(self._lbl_log)
+                                  cursor_color=(0.9, 0.95, 0.9, 1), multiline=True)
+        b_clear = Button(text='清空日志', font_size='16sp', size_hint_y=None, height=INPUT_H)
+        b_clear.bind(on_release=lambda _x: self._clear_log())
+        logbox3.add_widget(self._lbl_log)
+        logbox3.add_widget(b_clear)
+
+        # ---- 页面槽：固定区域，切页 = clear + add（安卓最稳，不重叠）----
+        self._pages = [sv1, sv2, logbox3]
+        self._page_slot = BoxLayout(orientation='vertical')
+        root.add_widget(self._page_slot)
+        self._switch_page(0)
         return root
+
+    def _switch_page(self, idx):
+        """切页：清空页面槽再挂目标页；同时高亮导航按钮"""
+        self._page_slot.clear_widgets()
+        self._page_slot.add_widget(self._pages[idx])
+        for i, b in enumerate((self._btn_p1, self._btn_p2, self._btn_p3)):
+            b.background_color = ACCENT if i == idx else (0.35, 0.35, 0.35, 1)
+
+    def _clear_log(self):
+        self._log_text = ''
+        self._lbl_log.text = ''
 
     def _section_title(self, text, color):
         return Label(text=text, font_size='18sp', bold=True, color=color,

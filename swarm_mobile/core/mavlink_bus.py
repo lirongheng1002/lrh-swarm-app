@@ -60,9 +60,16 @@ class Link:
         self._stop = True
 
     def _run(self):
+        import socket
         idle_timeout = self.bus.cfg['link'].get('idle_timeout_s', 20)
+        reconnect_s = self.bus.cfg['link'].get('reconnect_s', 2)
+        n_fail = 0
         while not self._stop:
             try:
+                # 连接前先探测（8s 超时）：pymavlink 的 tcp 连接无超时，
+                # 手机 4G 不通时会长时间卡住没反应 —— 探测保证快速失败+自动重试
+                _s = socket.create_connection((self.host, self.port), timeout=8)
+                _s.close()
                 self.mav = mavutil.mavlink_connection(
                     'tcp:%s:%s' % (self.host, self.port),
                     source_system=255, source_component=190)
@@ -70,11 +77,17 @@ class Link:
                 self._last_data = time.time()
                 self._idle = False
                 self._has_pkt = False
+                n_fail = 0
                 self.bus._on_link(self.sysid, True, None)
             except Exception as e:
                 self.online = False
-                self.bus._on_link(self.sysid, False, str(e))
-                time.sleep(self.bus.cfg['link']['reconnect_s'])
+                n_fail += 1
+                # 失败原因进日志（前 3 次每次记，之后每 5 次记一行，不刷屏）
+                if n_fail <= 3 or n_fail % 5 == 0:
+                    self.bus._on_link(self.sysid, False,
+                                      '连接失败(第%d次，每%ds自动重试)：%s'
+                                      % (n_fail, reconnect_s, e))
+                time.sleep(reconnect_s)
                 continue
             try:
                 while not self._stop:
