@@ -46,20 +46,21 @@ jobs:
           exit $code
         shell: bash
 
-      - name: 失败时提取完整日志为错误标注（方便 API 自查）
+      - name: 失败时把构建日志回传到仓库（自助排查，[skip ci] 防循环）
         if: failure()
         run: |
-          echo '::error::====== .buildozer/buildozer.log 全文（buildozer 自写日志） ======'
-          tail -n 100 .buildozer/buildozer.log 2>/dev/null | while IFS= read -r line; do echo "::error::$line"; done
-          echo '::error::====== 工作区根 buildozer.log 尾部（40行） ======'
-          tail -n 40 buildozer.log 2>/dev/null | while IFS= read -r line; do echo "::error::$line"; done
-          echo '::error::====== .buildozer/android 结构 ======'
-          ls -R .buildozer/android 2>/dev/null | head -n 40 | while IFS= read -r line; do echo "::error::$line"; done
-          echo '::error::====== p4a 日志 ======'
-          find .buildozer -name '*.log' -not -name 'buildozer.log' 2>/dev/null | head -n 5 | while IFS= read -r f; do
-            echo "::error::-- $f --"
-            tail -n 20 "$f" 2>/dev/null | while IFS= read -r line; do echo "::error::$line"; done
-          done
+          mkdir -p ci_logs
+          cp -f .buildozer/buildozer.log ci_logs/buildozer.log 2>/dev/null || true
+          cp -f buildozer.log ci_logs/stdout.log 2>/dev/null || true
+          find .buildozer -name '*.log' -not -name 'buildozer.log' -exec sh -c 'cp -f "$1" ci_logs/ 2>/dev/null' _ {} \; 2>/dev/null || true
+          ls -la ci_logs
+          git config user.name "ci-bot"
+          git config user.email "ci@github.local"
+          git add ci_logs
+          git commit -m "ci: 回传构建日志 [skip ci]" || echo "无日志可回传"
+          git push origin main 2>&1 | tail -n 3 || echo "日志回传推送失败"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
         shell: bash
 
