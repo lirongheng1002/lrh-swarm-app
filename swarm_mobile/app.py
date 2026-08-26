@@ -41,7 +41,12 @@ if os.path.isdir(_FONTS_DIR):
 if _ZH_FONT:
     try:
         from kivy.core.text import LabelBase
-        LabelBase.register('ZHFont', fn_regular=_ZH_FONT)
+        # 中文全局必杀注册：同时覆盖默认字体名 Roboto（Kivy 所有控件默认引用它，
+        # 不依赖 default_font 配置的解析，直接让中文字体成为唯一渲染字体）
+        LabelBase.register('ZHFont', fn_regular=_ZH_FONT, fn_bold=_ZH_FONT,
+                           fn_italic=_ZH_FONT, fn_bolditalic=_ZH_FONT)
+        LabelBase.register('Roboto', fn_regular=_ZH_FONT, fn_bold=_ZH_FONT,
+                           fn_italic=_ZH_FONT, fn_bolditalic=_ZH_FONT)
         from kivy.config import Config
         Config.set('kivy', 'default_font', ['ZHFont', 'Roboto'])
     except Exception:
