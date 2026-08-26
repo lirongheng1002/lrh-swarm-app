@@ -29,6 +29,8 @@ android.allow_backup = True
 android.private_storage = True
 android.enable_androidx = True
 android.accept_sdk_license = True
+# 应用图标：用桌面 LRH_icon（512x512 PNG，放项目根）
+android.icon = LRH_icon.png
 android.add_src =
 android.add_aars =
 android.add_jars =

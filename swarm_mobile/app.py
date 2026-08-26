@@ -28,7 +28,8 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
 
 from . import fleet as fleetmod
-from .core import vehicles, commands, missions, formation, config as cfgmod
+from . import mapview
+from .core import vehicles, commands, missions, formation, gauss, config as cfgmod
 
 # ---------- 中文字体注册（Android 上 Kivy 默认无 CJK 字体，必须内置） ----------
 _FONTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fonts')
@@ -115,6 +116,68 @@ class ConfirmPopup(Popup):
         body.add_widget(lbl)
         body.add_widget(btns)
         self.content = body
+
+
+class CoordPopup(Popup):
+    """坐标换算：CGCS2000 高斯平面 X/Y → 北纬/东经（回填航点经纬）"""
+
+    def __init__(self, on_result, **kw):
+        super().__init__(title='坐标换算（CGCS2000 高斯六度带）',
+                         size_hint=(0.94, 0.7), auto_dismiss=False, **kw)
+        self._on_result = on_result
+        self._lat = self._lon = None
+        body = BoxLayout(orientation='vertical', padding=14, spacing=12)
+        self._in_x = TextInput(hint_text='X（北向坐标，米）', font_size='17sp',
+                               multiline=False, input_filter='float')
+        self._in_y = TextInput(hint_text='Y（横坐标：(19)406840 / 19406840 / 406840）',
+                               font_size='17sp', multiline=False)
+        self._in_z = TextInput(hint_text='带号（可选，缺省自动判）', font_size='17sp',
+                               multiline=False, input_filter='int')
+        self._lbl_res = Label(text='等待输入坐标…', font_size='16sp', halign='left',
+                              valign='middle', color=(0.4, 0.85, 0.6, 1))
+        rowb = BoxLayout(orientation='horizontal', spacing=10, size_hint_y=None, height=BTN_H)
+        b_calc = Button(text='换算', font_size='17sp', background_color=ACCENT)
+        b_apply = Button(text='设为航点', font_size='17sp', background_color=OK)
+        b_close = Button(text='关闭', font_size='17sp')
+        b_calc.bind(on_release=lambda _x: self._calc())
+        b_apply.bind(on_release=lambda _x: self._apply())
+        b_close.bind(on_release=lambda _x: self.dismiss())
+        rowb.add_widget(b_calc)
+        rowb.add_widget(b_apply)
+        rowb.add_widget(b_close)
+        body.add_widget(self._in_x)
+        body.add_widget(self._in_y)
+        body.add_widget(self._in_z)
+        body.add_widget(self._lbl_res)
+        body.add_widget(rowb)
+        self.content = body
+
+    def _calc(self):
+        try:
+            x = float(self._in_x.text)
+        except Exception:
+            self._lbl_res.text = 'X 请输入数字'
+            return
+        yraw = self._in_y.text.strip()
+        zstr = self._in_z.text.strip()
+        try:
+            zone = int(zstr) if zstr else None
+        except Exception:
+            zone = None
+        try:
+            lat, lon = gauss.zone_to_latlon(x, yraw, zone)
+        except Exception as e:
+            self._lbl_res.text = '换算失败：%s' % e
+            return
+        self._lat, self._lon = lat, lon
+        self._lbl_res.text = '换算结果：北纬 %.6f°  东经 %.6f°' % (lat, lon)
+
+    def _apply(self):
+        if self._lat is None:
+            self._lbl_res.text = '请先点「换算」'
+            return
+        self._on_result(self._lat, self._lon)
+        self.dismiss()
 
 
 class SwarmMobileApp(App):
@@ -208,11 +271,12 @@ class SwarmMobileApp(App):
         body.add_widget(self._build_mission())
 
         body.add_widget(self._section_title('五、运行日志', (0.45, 0.45, 0.45, 1)))
-        self._lbl_log = Label(text='', font_size='15sp', halign='left', valign='top',
-                              color=(0.75, 0.85, 0.75, 1), size_hint_y=None,
-                              text_size=(None, None))
-        self._lbl_log.bind(width=lambda _i, _w: setattr(self._lbl_log, 'text_size', (_w, None)))
-        self._lbl_log.bind(texture_size=lambda _i, _t: setattr(self._lbl_log, 'height', _t[1]))
+        self._lbl_log = TextInput(text='', readonly=True, font_size='15sp',
+                                  background_color=(0.12, 0.14, 0.12, 1),
+                                  foreground_color=(0.75, 0.85, 0.75, 1),
+                                  cursor_color=(0.9, 0.95, 0.9, 1),
+                                  size_hint_y=None, height='190dp', multiline=True)
+        # 只读输入框：Android 上长按可选中复制（原 Label 无法选中，领导要求日志可选中）
         body.add_widget(self._lbl_log)
 
         sv.add_widget(body)
@@ -401,12 +465,14 @@ class SwarmMobileApp(App):
     # ---------------- 四、任务航点 ----------------
     def _build_mission(self):
         b = BoxLayout(orientation='vertical', spacing=6, size_hint_y=None)
-        r1 = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height=INPUT_H)
-        r1.add_widget(self._mk_btn('下载任务', ACCENT, self._on_download_mission, size_hint_x=0.33))
+        r1 = BoxLayout(orientation='horizontal', spacing=4, size_hint_y=None, height=INPUT_H)
+        r1.add_widget(self._mk_btn('下载任务', ACCENT, self._on_download_mission, size_hint_x=0.25))
         r1.add_widget(self._mk_btn('上传任务', ACCENT, lambda: self._confirm(
             '上传任务', '把当前任务（%d 条）写入 %s？' % (self._mission_len(), self._sel_name()),
-            self._on_upload_mission), size_hint_x=0.33))
-        r1.add_widget(self._mk_btn('清除任务', GRAY, self._on_clear_mission, size_hint_x=0.34))
+            self._on_upload_mission), size_hint_x=0.25))
+        r1.add_widget(self._mk_btn('清除任务', GRAY, self._on_clear_mission, size_hint_x=0.25))
+        r1.add_widget(self._mk_btn('地图设点', (0.15, 0.6, 0.35, 1), self._on_open_map,
+                                   size_hint_x=0.25))
         b.add_widget(r1)
 
         r2 = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height=INPUT_H)
@@ -423,6 +489,11 @@ class SwarmMobileApp(App):
         r2.add_widget(self._mk_btn('插投弹', DANGER, self._on_add_bomb, size_hint_x=0.16))
         b.add_widget(r2)
 
+        r3 = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height=INPUT_H)
+        r3.add_widget(self._mk_btn('坐标换算（高斯X/Y→经纬回填）', (0.55, 0.4, 0.2, 1),
+                                   self._on_open_coord, size_hint_x=1.0))
+        b.add_widget(r3)
+
         self._mission_scroll = ScrollView(size_hint_y=None, height='200dp')
         self._mission_box = BoxLayout(orientation='vertical', spacing=2,
                                       size_hint_y=None)
@@ -436,6 +507,10 @@ class SwarmMobileApp(App):
         return len(v.mission) if v else 0
 
     def _refresh_mission_table(self):
+        # 可能从网络线程（任务下载/上传回调）触发 —— 同样调度到主线程
+        Clock.schedule_once(lambda _dt: self._refresh_mission_table_impl(), 0)
+
+    def _refresh_mission_table_impl(self):
         v = self.fleet.vehicle(self._sel_sysid())
         rows = v.mission if v else []
         self._mission_box.clear_widgets()
@@ -472,6 +547,9 @@ class SwarmMobileApp(App):
         self.fleet.upload_mission(self._sel_sysid())
 
     def _on_clear_mission(self, _x):
+        if not self.fleet.connected:
+            self._append_log('未连接')
+            return
         self.fleet.clear_mission(self._sel_sysid())
         self._refresh_mission_table()
 
@@ -492,6 +570,41 @@ class SwarmMobileApp(App):
             return
         self.fleet.add_bomb_after(self._sel_sysid(), self._sel_seq)
         self._refresh_mission_table()
+
+    def _on_open_map(self):
+        """打开高德卫星地图：以首架在线机（或默认）为中心，点击取点"""
+        center = (34.26, 108.94)
+        for s in sorted(self.fleet.fleet):
+            v = self.fleet.fleet[s]
+            lat = getattr(v, 'lat', None)
+            lon = getattr(v, 'lon', None)
+            if v.online and lat and lon and lat != 0:
+                center = (lat, lon)
+                break
+        self._map_popup = Popup(
+            title='高德卫星地图 —— 点击任一点设为航点',
+            content=mapview.MapPage(center=center, zoom=15,
+                                    on_pick=self._on_map_pick,
+                                    on_close=lambda: self._map_popup.dismiss()),
+            size_hint=(0.98, 0.98))
+        self._map_popup.open()
+
+    def _on_map_pick(self, lat, lng):
+        self._wp_lat.text = '%.6f' % lat
+        self._wp_lon.text = '%.6f' % lng
+        self._append_log('地图取点 %.6f, %.6f —— 填好高度后点「加航点」' % (lat, lng))
+        try:
+            self._map_popup.dismiss()
+        except Exception:
+            pass
+
+    def _on_open_coord(self):
+        CoordPopup(on_result=self._on_coord_result).open()
+
+    def _on_coord_result(self, lat, lon):
+        self._wp_lat.text = '%.6f' % lat
+        self._wp_lon.text = '%.6f' % lon
+        self._append_log('坐标换算回填：北纬 %.6f 东经 %.6f —— 填好高度后点「加航点」' % (lat, lon))
 
     # ---------------- 回调 ----------------
     def _sp_mode_all_mode(self):
@@ -571,6 +684,9 @@ class SwarmMobileApp(App):
             self._btn_conn.text = '断开'
 
     def _refresh_satellites(self):
+        Clock.schedule_once(lambda _dt: self._refresh_satellites_impl(), 0)
+
+    def _refresh_satellites_impl(self):
         sysids = sorted(self.fleet.fleet)
         if len(self._sat_box.children) != len(sysids):
             self._sat_box.clear_widgets()
@@ -587,6 +703,9 @@ class SwarmMobileApp(App):
                 w.color = GRAY
 
     def _refresh_single_state(self):
+        Clock.schedule_once(lambda _dt: self._refresh_single_state_impl(), 0)
+
+    def _refresh_single_state_impl(self):
         v = self.fleet.vehicle(self._sel_sysid())
         if v is None:
             self._lbl_veh.text = '未选择'
@@ -638,6 +757,11 @@ class SwarmMobileApp(App):
         ConfirmPopup(title=title, text=text, on_ok=on_ok).open()
 
     def _append_log(self, text):
+        # 可能从 mavlink 网络线程回调进来 —— 必须调度到主线程再改控件，
+        # 非主线程直接写 _lbl_log.text 是 Kivy 崩溃/闪退的根因
+        Clock.schedule_once(lambda _dt: self._log_impl(text), 0)
+
+    def _log_impl(self, text):
         self._log_text = (self._log_text + '\n' + text).strip()
         lines = self._log_text.split('\n')
         if len(lines) > 80:
