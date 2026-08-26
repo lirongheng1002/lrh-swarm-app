@@ -13,26 +13,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 固定 Python 3.11（buildozer/p4a 最稳组合）
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: 缓存 buildozer 工具链（SDK/NDK，二次构建免重下）
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: buildozer-${{ runner.os }}
+          key: buildozer-${{ runner.os }}-py311
 
-      - name: 安装 Java + Buildozer 依赖
+      - name: 安装 Java + 稳定版 Buildozer 1.5.0
         run: |
           sudo apt-get update
-          sudo apt-get install -y openjdk-17-jdk python3-pip git zip unzip \
+          sudo apt-get install -y openjdk-17-jdk git zip unzip \
             autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
             libncursesw5-dev cmake libffi-dev libssl-dev
-          pip install --user buildozer cython
+          pip install --user buildozer==1.5.0
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: 打包 APK
         run: |
+          export PATH="$HOME/.local/bin:$PATH"
           buildozer android debug
-        env:
-          ANDROIDSDK_HOME: "${{ runner.workspace }}/.buildozer"
 
       - name: 上传 APK 产物
         uses: actions/upload-artifact@v4

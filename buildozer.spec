@@ -21,16 +21,16 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE,ACCESS_WIFI_STATE
 android.api = 34
 android.minapi = 21
 android.ndk = 25b
-android.archs = arm64-v8a,armeabi-v7a
+android.archs = arm64-v8a
 android.allow_backup = True
 android.private_storage = False
 android.enable_androidx = True
+android.accept_sdk_license = True
 android.add_src =
 android.add_aars =
 android.add_jars =
 android.gradle_dependencies =
 android.manifest_placeholders =
-android.signing = debug
 
 # ---- iOS(暂不支持) / 其他 ----
 ios.package_name = org.lrh.lrhswarm
