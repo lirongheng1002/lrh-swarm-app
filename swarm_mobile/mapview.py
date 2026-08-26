@@ -171,10 +171,16 @@ class MapPage(BoxLayout):
 
     def _on_zoom(self, inst, val):
         self._zoom = int(val)
-        self._rebuild()
+        try:
+            self._rebuild()
+        except Exception:
+            pass
 
     def _on_resize(self, *a):
-        self._rebuild()
+        try:
+            self._rebuild()
+        except Exception:
+            pass
 
     def _do_close(self):
         if self._on_close:

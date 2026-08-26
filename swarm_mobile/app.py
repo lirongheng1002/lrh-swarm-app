@@ -252,35 +252,48 @@ class SwarmMobileApp(App):
         self._sat_scroll.add_widget(self._sat_box)
         root.add_widget(top)
 
-        # ---- 主滚动区 ----
-        sv = ScrollView()
-        body = BoxLayout(orientation='vertical', spacing=8, padding=(4, 4),
-                         size_hint_y=None)
-        body.bind(minimum_height=body.setter('height'))
+        # ---- 两页（TabbedPanel）：①飞行操作 ②任务航线 —— 不重叠，各页独立滚动 ----
+        from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
+        tp = TabbedPanel(do_default_tab=False, tab_pos='top_mid', size_hint_y=1)
 
-        body.add_widget(self._section_title('一、全队操作', (0.18, 0.4, 0.72, 1)))
-        body.add_widget(self._build_fleet_ops())
+        # ---- 页① 飞行操作：全队操作 + 队形编队 + 单机操作 ----
+        sv1 = ScrollView()
+        body1 = BoxLayout(orientation='vertical', spacing=8, padding=(4, 4),
+                          size_hint_y=None)
+        body1.bind(minimum_height=body1.setter('height'))
+        body1.add_widget(self._section_title('一、全队操作', (0.18, 0.4, 0.72, 1)))
+        body1.add_widget(self._build_fleet_ops())
+        body1.add_widget(self._section_title('二、队形编队', (0.18, 0.4, 0.72, 1)))
+        body1.add_widget(self._build_formation())
+        body1.add_widget(self._section_title('三、单机操作', (0.18, 0.4, 0.72, 1)))
+        body1.add_widget(self._build_single())
+        sv1.add_widget(body1)
+        t1 = TabbedPanelItem(text='① 飞行操作')
+        t1.content = sv1
+        tp.add_widget(t1)
 
-        body.add_widget(self._section_title('二、队形编队', (0.18, 0.4, 0.72, 1)))
-        body.add_widget(self._build_formation())
+        # ---- 页② 任务航线：下载/上传/清除/地图设点/坐标换算/经纬输入/任务表 ----
+        sv2 = ScrollView()
+        body2 = BoxLayout(orientation='vertical', spacing=8, padding=(4, 4),
+                          size_hint_y=None)
+        body2.bind(minimum_height=body2.setter('height'))
+        body2.add_widget(self._section_title('任务航线（下载/上传/地图/坐标换算/航点）',
+                                            (0.18, 0.4, 0.72, 1)))
+        body2.add_widget(self._build_mission())
+        sv2.add_widget(body2)
+        t2 = TabbedPanelItem(text='② 任务航线')
+        t2.content = sv2
+        tp.add_widget(t2)
+        root.add_widget(tp)
 
-        body.add_widget(self._section_title('三、单机操作', (0.18, 0.4, 0.72, 1)))
-        body.add_widget(self._build_single())
-
-        body.add_widget(self._section_title('四、任务航点', (0.18, 0.4, 0.72, 1)))
-        body.add_widget(self._build_mission())
-
-        body.add_widget(self._section_title('五、运行日志', (0.45, 0.45, 0.45, 1)))
+        # ---- 底部日志（两页共用常显，长按可选中复制）----
         self._lbl_log = TextInput(text='', readonly=True, font_size='15sp',
                                   background_color=(0.12, 0.14, 0.12, 1),
                                   foreground_color=(0.75, 0.85, 0.75, 1),
                                   cursor_color=(0.9, 0.95, 0.9, 1),
-                                  size_hint_y=None, height='190dp', multiline=True)
-        # 只读输入框：Android 上长按可选中复制（原 Label 无法选中，领导要求日志可选中）
-        body.add_widget(self._lbl_log)
-
-        sv.add_widget(body)
-        root.add_widget(sv)
+                                  size_hint_y=None, height='150dp', multiline=True)
+        # 只读输入框：长按可选中复制（领导要求日志可选中/导出）
+        root.add_widget(self._lbl_log)
         return root
 
     def _section_title(self, text, color):
@@ -729,7 +742,19 @@ class SwarmMobileApp(App):
     def _mk_btn(self, text, color, on_release, size_hint_x=1, height=BTN_H):
         b = Button(text=text, font_size='16sp', background_color=color,
                    size_hint_y=None, height=height, size_hint_x=size_hint_x)
-        b.bind(on_release=on_release)
+        # 统一安全护栏：回调先按「带参」试调，签名不收时退回无参；任何异常只写日志，
+        # 绝不冒泡崩掉 App（领导反馈点按钮秒退 —— 护栏后任何回调异常都不可能再闪退）
+        def _safe(*a):
+            try:
+                on_release(*a)
+            except TypeError:
+                try:
+                    on_release()
+                except Exception as e:
+                    self._append_log('操作异常：%s' % e)
+            except Exception as e:
+                self._append_log('操作异常：%s' % e)
+        b.bind(on_release=_safe)
         return b
 
     def _mk_hbox(self, widgets, height=INPUT_H):
