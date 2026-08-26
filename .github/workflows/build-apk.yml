@@ -32,11 +32,28 @@ jobs:
             libncursesw5-dev cmake libffi-dev libssl-dev
           pip install --user buildozer==1.5.0
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          python3 --version
+          buildozer --version
 
-      - name: 打包 APK
+      - name: 打包 APK（输出同时落盘 buildozer.log）
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          buildozer android debug
+          buildozer android debug 2>&1 | tee buildozer.log
+        shell: bash
+
+      - name: 失败时自动提取日志尾部为错误标注（方便 API 自查）
+        if: failure()
+        run: |
+          echo '::error::====== buildozer 日志尾部（最后60行） ======'
+          tail -n 60 buildozer.log 2>/dev/null || true
+          for f in .buildozer/android/platform/build-*/*.log; do
+            if [ -f "$f" ]; then
+              echo '::error::====== p4a 日志尾部（最后30行） ======'
+              tail -n 30 "$f"
+            fi
+          done
+        continue-on-error: true
+        shell: bash
 
       - name: 上传 APK 产物
         uses: actions/upload-artifact@v4
