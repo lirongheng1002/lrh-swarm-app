@@ -177,6 +177,9 @@ class MapPage(BoxLayout):
             pass
 
     def _on_resize(self, *a):
+        # Popup 打开瞬间尺寸可能为 0——此时重建瓦片会算错/卡死，跳过等首次有效尺寸
+        if self.width < 100 or self.height < 100:
+            return
         try:
             self._rebuild()
         except Exception:
@@ -188,6 +191,8 @@ class MapPage(BoxLayout):
 
     def _rebuild(self, *a):
         """按中心+缩放重建 3x3 瓦片网格"""
+        if self.width < 100 or self.height < 100:
+            return
         self._center = tuple(self._center)
         lat, lng = wgs84_to_gcj02(self._center[0], self._center[1])
         z = self._zoom

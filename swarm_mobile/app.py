@@ -218,7 +218,8 @@ class SwarmMobileApp(App):
         root = BoxLayout(orientation='vertical', spacing=4, padding=(6, 6))
 
         # ---- 顶部固定区 ----
-        top = BoxLayout(orientation='vertical', size_hint_y=None, height='190dp', spacing=4)
+        # 顶部压缩（领导要求：连接/断开放一行，顶栏缩小给页面让空间）
+        top = BoxLayout(orientation='vertical', size_hint_y=None, height='108dp', spacing=3)
         row1 = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height=INPUT_H)
         self._host_in = TextInput(text=str(self.cfg.get('server', {}).get('host', '')),
                                   hint_text='服务器IP 如112.124.6.186',
@@ -233,7 +234,7 @@ class SwarmMobileApp(App):
         row1.add_widget(self._btn_conn)
         top.add_widget(row1)
 
-        row2 = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height=INPUT_H)
+        row2 = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height='36dp')
         self._lbl_status = Label(text='状态：未连接', font_size='17sp', halign='left',
                                  valign='middle', size_hint_x=0.56)
         self._lbl_fm = Label(text='编队:关', font_size='16sp', halign='center', valign='middle',
@@ -252,34 +253,44 @@ class SwarmMobileApp(App):
         self._sat_scroll.add_widget(self._sat_box)
         root.add_widget(top)
 
-        # ---- 三栏导航（顶部按钮切页；不用 TabbedPanel——安卓上其 content 尺寸 bug
+        # ---- 四栏导航（顶部按钮切页；不用 TabbedPanel——安卓上其 content 尺寸 bug
         #      导致切到第2栏后切不回/整页点不动，地图与航线窗口全无响应）----
-        nav = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height='48dp')
-        self._btn_p1 = Button(text='① 飞行操作', font_size='16sp', background_color=ACCENT)
-        self._btn_p2 = Button(text='② 任务航线', font_size='16sp')
-        self._btn_p3 = Button(text='③ 运行日志', font_size='16sp')
+        nav = BoxLayout(orientation='horizontal', spacing=4, size_hint_y=None, height='44dp')
+        self._btn_p1 = Button(text='① 全部飞机', font_size='15sp', background_color=ACCENT)
+        self._btn_p2 = Button(text='② 单架飞机', font_size='15sp')
+        self._btn_p3 = Button(text='③ 任务航线', font_size='15sp')
+        self._btn_p4 = Button(text='④ 运行日志', font_size='15sp')
         self._btn_p1.bind(on_release=lambda _x: self._switch_page(0))
         self._btn_p2.bind(on_release=lambda _x: self._switch_page(1))
         self._btn_p3.bind(on_release=lambda _x: self._switch_page(2))
+        self._btn_p4.bind(on_release=lambda _x: self._switch_page(3))
         nav.add_widget(self._btn_p1)
         nav.add_widget(self._btn_p2)
         nav.add_widget(self._btn_p3)
+        nav.add_widget(self._btn_p4)
         root.add_widget(nav)
 
-        # ---- 页① 飞行操作：全队操作 + 队形编队 + 单机操作 ----
+        # ---- 页① 全部飞机：全队操作 + 队形编队（领导要求飞行拆分：全部/单架）----
+        sv0 = ScrollView()
+        body0 = BoxLayout(orientation='vertical', spacing=8, padding=(4, 4),
+                          size_hint_y=None)
+        body0.bind(minimum_height=body0.setter('height'))
+        body0.add_widget(self._section_title('一、全队操作', (0.18, 0.4, 0.72, 1)))
+        body0.add_widget(self._build_fleet_ops())
+        body0.add_widget(self._section_title('二、队形编队', (0.18, 0.4, 0.72, 1)))
+        body0.add_widget(self._build_formation())
+        sv0.add_widget(body0)
+
+        # ---- 页② 单架飞机：单机操作（选机/状态/起飞/降落/解锁/上锁/返航/投弹/切模式）----
         sv1 = ScrollView()
         body1 = BoxLayout(orientation='vertical', spacing=8, padding=(4, 4),
                           size_hint_y=None)
         body1.bind(minimum_height=body1.setter('height'))
-        body1.add_widget(self._section_title('一、全队操作', (0.18, 0.4, 0.72, 1)))
-        body1.add_widget(self._build_fleet_ops())
-        body1.add_widget(self._section_title('二、队形编队', (0.18, 0.4, 0.72, 1)))
-        body1.add_widget(self._build_formation())
         body1.add_widget(self._section_title('三、单机操作', (0.18, 0.4, 0.72, 1)))
         body1.add_widget(self._build_single())
         sv1.add_widget(body1)
 
-        # ---- 页② 任务航线：下载/上传/清除/地图设点/坐标换算/经纬输入/任务表 ----
+        # ---- 页③ 任务航线：下载/上传/清除/地图设点/坐标换算/经纬输入/任务表 ----
         sv2 = ScrollView()
         body2 = BoxLayout(orientation='vertical', spacing=8, padding=(4, 4),
                           size_hint_y=None)
@@ -301,7 +312,7 @@ class SwarmMobileApp(App):
         logbox3.add_widget(b_clear)
 
         # ---- 页面槽：固定区域，切页 = clear + add（安卓最稳，不重叠）----
-        self._pages = [sv1, sv2, logbox3]
+        self._pages = [sv0, sv1, sv2, logbox3]
         self._page_slot = BoxLayout(orientation='vertical')
         root.add_widget(self._page_slot)
         self._switch_page(0)
@@ -311,7 +322,7 @@ class SwarmMobileApp(App):
         """切页：清空页面槽再挂目标页；同时高亮导航按钮"""
         self._page_slot.clear_widgets()
         self._page_slot.add_widget(self._pages[idx])
-        for i, b in enumerate((self._btn_p1, self._btn_p2, self._btn_p3)):
+        for i, b in enumerate((self._btn_p1, self._btn_p2, self._btn_p3, self._btn_p4)):
             b.background_color = ACCENT if i == idx else (0.35, 0.35, 0.35, 1)
 
     def _clear_log(self):
