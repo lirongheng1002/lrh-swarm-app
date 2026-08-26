@@ -1,7 +1,7 @@
 name: build-apk
 
-# 云端打包 Android APK：把本项目推到 GitHub（默认 main 分支），
-# 或手动点 Actions -> build-apk -> Run workflow。
+# 云端打包 Android APK：推到 main 自动构建，
+# 或手动 Actions -> build-apk -> Run workflow。
 on:
   workflow_dispatch:
   push:
@@ -22,7 +22,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: buildozer-${{ runner.os }}-py311
+          key: buildozer-${{ runner.os }}-py311-2
 
       - name: 安装 Java + 稳定版 Buildozer 1.5.0
         run: |
@@ -35,33 +35,29 @@ jobs:
           python3 --version
           buildozer --version
 
-      - name: 打包 APK（输出直接落盘文件，无缓冲）
+      - name: 打包 APK（PTY 保真全量输出）
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          buildozer android debug > buildozer.log 2>&1
+          script -qec "buildozer android debug" buildozer_pty.log < /dev/null
           code=$?
           echo "BUILDOZER_EXIT=$code (0=成功)"
-          echo "--- buildozer.log 最后10行 ---"
-          tail -n 10 buildozer.log
+          echo "--- buildozer_pty.log 尾部 3000 字节 ---"
+          tail -c 3000 buildozer_pty.log
           exit $code
         shell: bash
 
-      - name: 失败时把构建日志回传到仓库（自助排查，[skip ci] 防循环）
-        if: failure()
+      - name: 打包现场回传仓库（无论成败，成功时含 APK）
+        if: always()
         run: |
-          mkdir -p ci_logs
-          cp -f .buildozer/buildozer.log ci_logs/buildozer.log 2>/dev/null || true
-          cp -f buildozer.log ci_logs/stdout.log 2>/dev/null || true
-          find .buildozer -name '*.log' -not -name 'buildozer.log' -exec sh -c 'cp -f "$1" ci_logs/ 2>/dev/null' _ {} \; 2>/dev/null || true
-          ls -la ci_logs
+          tar czf ci_snapshot.tar.gz buildozer_pty.log bin .buildozer/buildozer.log 2>/dev/null || true
+          ls -la ci_snapshot.tar.gz 2>/dev/null || true
           git config user.name "ci-bot"
           git config user.email "ci@github.local"
-          git add ci_logs
-          git commit -m "ci: 回传构建日志 [skip ci]" || echo "无日志可回传"
-          git push origin main 2>&1 | tail -n 3 || echo "日志回传推送失败"
+          git add ci_snapshot.tar.gz
+          git commit -m "ci: 打包现场回传 [skip ci]" || echo "无现场可回传"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main 2>&1 | tail -3 || echo "回传推送失败"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
         shell: bash
 
       - name: 上传 APK 产物
