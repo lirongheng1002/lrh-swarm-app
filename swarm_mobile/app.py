@@ -444,7 +444,7 @@ class SwarmMobileApp(App):
         r3.add_widget(self._fm_alt)
         # 单位 m：灰色毛玻璃小框（领导：单位用灰框）
         gm = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
-                        height='30dp', padding=(2, 0), spacing=0,
+                        height='40dp', padding=(2, 0), spacing=0,
                         bg=(0.6, 0.62, 0.66, 0.16), border=(0.6, 0.62, 0.66, 0.5),
                         radius='8dp', border_width='1dp')
         gm.add_widget(Label(text='m', font_size='14sp', halign='center',
@@ -464,7 +464,7 @@ class SwarmMobileApp(App):
         r4.add_widget(self._spd_all)
         # 单位 m/s：灰色毛玻璃小框
         gms = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
-                         height='30dp', padding=(2, 0), spacing=0,
+                         height='40dp', padding=(2, 0), spacing=0,
                          bg=(0.6, 0.62, 0.66, 0.16), border=(0.6, 0.62, 0.66, 0.5),
                          radius='8dp', border_width='1dp')
         gms.add_widget(Label(text='m/s', font_size='13sp', halign='center',
