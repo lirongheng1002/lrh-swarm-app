@@ -577,7 +577,7 @@ class SwarmMobileApp(App):
     def _build_single(self):
         """单机操作页：控制元素整体下移，按钮圆润，底部固定本机切模式。"""
         b = BoxLayout(orientation='vertical', spacing=4, padding=(6, 0),
-                      size_hint_y=None, height='418dp')
+                      size_hint_y=None, height='422dp')
         # 选机行
         top = GlassPanel(orientation='horizontal', spacing=8, padding=(10, 4),
                          size_hint_y=None, height='40dp',
@@ -600,8 +600,8 @@ class SwarmMobileApp(App):
         # （领导：删占位空白——全部控件上移贴紧，不留大片空白）
 
         # 控制按钮区（2 列 3 行）
-        gwrap = BoxLayout(orientation='vertical', spacing=2, size_hint_y=None, height='170dp')
-        g = GridLayout(cols=2, spacing=4, size_hint_y=None, height='128dp')
+        gwrap = BoxLayout(orientation='vertical', spacing=2, size_hint_y=None, height='174dp')
+        g = GridLayout(cols=2, spacing=6, size_hint_y=None, height='132dp')
         g.add_widget(self._mk_btn('单机起飞', OK, lambda: self._confirm(
             '单机起飞', '%s 按 %s m 起飞？' % (self._sel_name(), self._tof_alt()),
             lambda: self._single_act('起飞', self.fleet.takeoff, self._tof_alt())),
