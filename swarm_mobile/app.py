@@ -314,7 +314,7 @@ class SwarmMobileApp(App):
         body1.add_widget(BoxLayout(size_hint_y=1))
 
         # ---- 页③ 任务航线：上面=高德卫星地图（占 65%，重点！地图一定要大），下面=全部功能区贴底（占 35%）----
-        body2 = BoxLayout(orientation='vertical', spacing=2, padding=(2, 2))
+        body2 = BoxLayout(orientation='vertical', spacing=6, padding=(2, 2))
         self._map_page = mapview.MapPage(center=self._map_default_center(),
                                          zoom=14, embedded=True,
                                          on_pick=self._on_map_pick_embed,
