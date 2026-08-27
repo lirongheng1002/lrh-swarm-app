@@ -176,25 +176,24 @@ class MapPage(BoxLayout):
 
         # 顶栏：坐标显示 + 缩放提示 + 关闭按钮（embedded 内嵌版无关闭）
         top = BoxLayout(orientation='horizontal', size_hint_y=None, height='42dp',
-                        spacing=8, padding=(8, 4))
-        self._lbl_coord = Label(text='%.5f, %.5f' % center, size_hint_x=0.55,
-                                font_size='15sp', halign='left')
-        self._lbl_zoom = Label(text='zoom %d' % self._zoom, size_hint_x=0.2,
-                               font_size='14sp', halign='center',
-                               color=(0.7, 0.85, 1, 1))
-        top.add_widget(self._lbl_coord)
-        top.add_widget(self._lbl_zoom)
-        if not embedded:
-            top.add_widget(_mk_button('关闭', (0.75, 0.28, 0.22, 1),
-                                      self._do_close, size_hint_x=0.25))
-        else:
-            top.add_widget(Label(text='', size_hint_x=0.25))
+                        spacing=6, padding=(8, 0))
+        self._lbl_lat = RoundedButton(text='N:%.5f' % center[0], size_hint_x=0.33,
+                                      font_size='15sp', radius='6dp',
+                                      background_color=(0.2, 0.35, 0.55, 0.55),
+                                      border_width='1dp')
+        self._lbl_lng = RoundedButton(text='E:%.5f' % center[1], size_hint_x=0.33,
+                                      font_size='15sp', radius='6dp',
+                                      background_color=(0.2, 0.45, 0.3, 0.55),
+                                      border_width='1dp')
+        self._lbl_alt = RoundedButton(text='H:%d' % self._zoom, size_hint_x=0.33,
+                                      font_size='15sp', radius='6dp',
+                                      background_color=(0.5, 0.32, 0.18, 0.55),
+                                      border_width='1dp')
+        top.add_widget(self._lbl_lat)
+        top.add_widget(self._lbl_lng)
+        top.add_widget(self._lbl_alt)
         self.add_widget(top)
 
-        self._hint = Label(text='双指捏合缩放，点击地图设为航点',
-                           size_hint_y=None, height='26dp', font_size='12sp',
-                           color=(0.9, 0.85, 0.6, 1))
-        self.add_widget(self._hint)
 
         self.bind(size=self._on_resize)
         self._rebuild()
@@ -217,7 +216,7 @@ class MapPage(BoxLayout):
         if self.width < 100 or self.height < 100:
             return
         if hasattr(self, '_lbl_zoom'):
-            self._lbl_zoom.text = 'zoom %d' % self._zoom
+            self._lbl_alt.text = 'H:%d' % self._zoom
         self._center = tuple(self._center)
         lat, lng = wgs84_to_gcj02(self._center[0], self._center[1])
         z = self._zoom
@@ -265,7 +264,8 @@ class MapPage(BoxLayout):
         lng_gcj = _px_to_lng(px_x, z)
         lat_gcj = _px_to_lat(px_y, z)
         lat, lng = gcj02_to_wgs84(lat_gcj, lng_gcj)
-        self._lbl_coord.text = '%.5f, %.5f' % (lat, lng)
+        self._lbl_lat.text = 'N:%.5f' % lat
+        self._lbl_lng.text = 'E:%.5f' % lng
         if self._on_pick:
             self._on_pick(lat, lng)
 
