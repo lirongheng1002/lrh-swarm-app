@@ -2,6 +2,7 @@
 """
 from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
+from kivy.uix.boxlayout import BoxLayout
 from kivy.graphics import Color, RoundedRectangle, Line
 from kivy.properties import ListProperty, NumericProperty, StringProperty
 from kivy.metrics import dp
@@ -47,6 +48,38 @@ class RoundedButton(Button):
             self._border = Line(rounded_rectangle=(
                 self.x, self.y, self.width, self.height, dp(self.radius)),
                 width=dp(self.border_width))
+
+
+class GlassPanel(BoxLayout):
+    """圆角毛玻璃面板：半透明底色 + 圆角边框，用于把成组控件框起来。
+    bg / border 为 (r,g,b,a)；radius/border_width 用 NumericProperty（'12dp' 自动转 dp）。"""
+
+    radius = NumericProperty('12dp')
+    border_width = NumericProperty('1.2dp')
+
+    def __init__(self, bg=(0.25, 0.45, 0.85, 0.16), border=(0.4, 0.65, 1, 0.6),
+                 **kwargs):
+        super().__init__(**kwargs)
+        self._glass_bg = bg
+        self._glass_border = border
+        self.bind(pos=self._glass_draw, size=self._glass_draw,
+                  radius=self._glass_draw, border_width=self._glass_draw)
+        Clock.schedule_once(self._glass_draw, 0)
+
+    def _glass_draw(self, *args):
+        self.canvas.before.clear()
+        with self.canvas.before:
+            bg = self._glass_bg
+            if bg and bg[3] > 0:
+                Color(*bg)
+                RoundedRectangle(pos=self.pos, size=self.size,
+                                 radius=[dp(self.radius)] * 4)
+            bc = self._glass_border
+            if self.border_width and bc and bc[3] > 0:
+                Color(*bc)
+                Line(rounded_rectangle=(self.x, self.y, self.width,
+                                        self.height, dp(self.radius)),
+                     width=dp(self.border_width))
 
 
 class CompactTextInput(TextInput):

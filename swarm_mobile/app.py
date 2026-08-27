@@ -29,7 +29,7 @@ from kivy.uix.textinput import TextInput
 from . import fleet as fleetmod
 from . import mapview
 from .core import vehicles, commands, missions, formation, gauss, config as cfgmod
-from .widgets import RoundedButton, CompactTextInput
+from .widgets import RoundedButton, CompactTextInput, GlassPanel
 
 # ---------- 中文字体注册（Android 上 Kivy 默认无 CJK 字体，必须内置） ----------
 _FONTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fonts')
@@ -294,7 +294,7 @@ class SwarmMobileApp(App):
 
         # ---- 页① 全部飞机：全队操作 + 队形编队（领导要求飞行拆分：全部/单架）----
         sv0 = ScrollView()
-        body0 = BoxLayout(orientation='vertical', spacing=8, padding=(4, 4),
+        body0 = BoxLayout(orientation='vertical', spacing=8, padding=(4, 20),
                           size_hint_y=None)
         body0.bind(minimum_height=body0.setter('height'))
         body0.add_widget(self._section_title('一、全队操作', (0.18, 0.4, 0.72, 1)))
@@ -419,10 +419,17 @@ class SwarmMobileApp(App):
         # 行3/行4（全队高度/全队速度）拆出网格成独立整行——见下方 wrap 内重建
         # （领导：输入框横向拉长铺满左右、无留白；间距收紧向上贴顶）
 
-        wrap = BoxLayout(orientation='vertical', spacing=4,
-                         size_hint_y=None, height='174dp')
+        wrap = BoxLayout(orientation='vertical', spacing=8,
+                         size_hint_y=None, height='234dp')
         wrap.add_widget(g)
-        # 行3：全队高度——独立整行，输入框横拉铺满（领导：无留白、与按钮同高40dp）
+        # 上方功能按钮区与全队高度/速度行整体明显分开（领导：与上面任务栏不重叠）
+        wrap.add_widget(Label(text='', size_hint_y=None, height='28dp'))
+        # 蓝色圆角毛玻璃框：全队高度 + 全队速度 两行整体框起（领导）
+        bfm = GlassPanel(orientation='vertical', spacing=8, padding=(10, 8),
+                         size_hint_y=None, height='104dp',
+                         bg=(0.25, 0.45, 0.85, 0.16), border=(0.4, 0.65, 1, 0.6),
+                         radius='12dp')
+        # 行3：全队高度——输入框横拉铺满（领导：与按钮同高40dp）
         r3 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
         r3.add_widget(Label(text='全队高度', font_size='14sp', size_hint_x=0.14,
                             halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
@@ -432,10 +439,16 @@ class SwarmMobileApp(App):
         r3.add_widget(self._fm_alt)
         r3.add_widget(self._mk_btn('确定', OK, self._on_confirm_fm_alt,
                                    size_hint_x=0.2, font_size='14sp', height='40dp'))
-        r3.add_widget(Label(text='m', font_size='14sp', size_hint_x=0.08,
-                            halign='left', valign='middle', color=(0.7, 0.7, 0.7, 1)))
+        # 单位 m：灰色毛玻璃小框（领导：单位用灰框）
+        gm = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
+                        height='30dp', padding=(2, 0), spacing=0,
+                        bg=(0.6, 0.62, 0.66, 0.16), border=(0.6, 0.62, 0.66, 0.5),
+                        radius='8dp', border_width='1dp')
+        gm.add_widget(Label(text='m', font_size='14sp', halign='center',
+                            valign='middle', color=(0.75, 0.75, 0.75, 1)))
+        r3.add_widget(gm)
         r3.add_widget(Label(text='', size_hint_x=0.06))
-        wrap.add_widget(r3)
+        bfm.add_widget(r3)
         # 行4：全队速度——独立整行
         r4 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
         r4.add_widget(Label(text='全队速度', font_size='14sp', size_hint_x=0.14,
@@ -446,10 +459,17 @@ class SwarmMobileApp(App):
         r4.add_widget(self._spd_all)
         r4.add_widget(self._mk_btn('发送', OK, self._on_confirm_speed_all,
                                    size_hint_x=0.2, font_size='14sp', height='40dp'))
-        r4.add_widget(Label(text='m/s', font_size='14sp', size_hint_x=0.08,
-                            halign='left', valign='middle', color=(0.7, 0.7, 0.7, 1)))
+        # 单位 m/s：灰色毛玻璃小框
+        gms = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
+                         height='30dp', padding=(2, 0), spacing=0,
+                         bg=(0.6, 0.62, 0.66, 0.16), border=(0.6, 0.62, 0.66, 0.5),
+                         radius='8dp', border_width='1dp')
+        gms.add_widget(Label(text='m/s', font_size='13sp', halign='center',
+                             valign='middle', color=(0.75, 0.75, 0.75, 1)))
+        r4.add_widget(gms)
         r4.add_widget(Label(text='', size_hint_x=0.06))
-        wrap.add_widget(r4)
+        bfm.add_widget(r4)
+        wrap.add_widget(bfm)
         return wrap
 
     def _on_confirm_tof_alt(self, _x):
@@ -484,9 +504,14 @@ class SwarmMobileApp(App):
 
     # ---------------- 二、队形编队 ----------------
     def _build_formation(self):
-        b = BoxLayout(orientation='vertical', spacing=8,
-                      size_hint_y=None, height='208dp')
+        b = BoxLayout(orientation='vertical', spacing=12,
+                      size_hint_y=None, height='232dp')
         # 领导要求：队形区不再重复全队高度（①网格已有，编队/返航都读①的 _fm_alt）
+        # 蓝色圆角毛玻璃框：前后/左右/小组 行整体框起（领导）
+        gr2 = GlassPanel(orientation='horizontal', spacing=8, padding=(10, 6),
+                         size_hint_y=None, height='52dp',
+                         bg=(0.25, 0.45, 0.85, 0.16), border=(0.4, 0.65, 1, 0.6),
+                         radius='12dp')
         r2 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
         r2.add_widget(Label(text='前后/左右/小组m', font_size='13sp', size_hint_x=0.24,
                             halign='left', valign='middle'))
@@ -496,13 +521,13 @@ class SwarmMobileApp(App):
                                        input_filter='float', size_hint_x=0.2))
         r2.add_widget(CompactTextInput(text=str(self.cfg['formation'].get('spacing_g', 10)),
                                        input_filter='float', size_hint_x=0.2))
-        b.add_widget(r2)
-        r3 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='48dp')
+        gr2.add_widget(r2)
+        b.add_widget(gr2)
+        r3 = BoxLayout(orientation='horizontal', spacing=0, size_hint_y=None, height='48dp')
         r3.add_widget(self._mk_btn('开始编队', OK, self._on_formation_start,
-                                   size_hint_x=0.48, font_size='16sp'))
+                                   size_hint_x=0.5, font_size='16sp'))
         r3.add_widget(self._mk_btn('暂停编队', DANGER, self._on_formation_stop,
-                                   size_hint_x=0.48, font_size='16sp'))
-        r3.add_widget(Label(text='', size_hint_x=0.04))
+                                   size_hint_x=0.5, font_size='16sp'))
         b.add_widget(r3)
         pg = GridLayout(cols=3, spacing=6, size_hint_y=None, height='96dp')
         for name in ['一字横排', '人字形', '前三角', '后三角', '梯形', '三角群']:
@@ -1068,10 +1093,10 @@ class SwarmMobileApp(App):
 
     # ---------------- 通用 ----------------
     def _mk_btn(self, text, color, on_release, size_hint_x=1, height=BTN_H,
-                radius='8dp', font_size='16sp'):
+                radius='8dp', font_size='16sp', size_hint_y=None):
         b = RoundedButton(text=text, font_size=font_size,
                           background_color=color,
-                          size_hint_y=None, height=height,
+                          size_hint_y=size_hint_y, height=height,
                           size_hint_x=size_hint_x, radius=radius)
         # 统一安全护栏：回调先按「带参」试调，签名不收时退回无参；任何异常只写日志，
         # 绝不冒泡崩掉 App（领导反馈点按钮秒退 —— 护栏后任何回调异常都不可能再闪退）
