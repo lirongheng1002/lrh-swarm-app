@@ -577,7 +577,7 @@ class SwarmMobileApp(App):
     def _build_single(self):
         """单机操作页：控制元素整体下移，按钮圆润，底部固定本机切模式。"""
         b = BoxLayout(orientation='vertical', spacing=4, padding=(6, 0),
-                      size_hint_y=None, height='422dp')
+                      size_hint_y=None, height='418dp')
         # 选机行
         top = GlassPanel(orientation='horizontal', spacing=8, padding=(10, 4),
                          size_hint_y=None, height='40dp',
@@ -600,41 +600,43 @@ class SwarmMobileApp(App):
         # （领导：删占位空白——全部控件上移贴紧，不留大片空白）
 
         # 控制按钮区（2 列 3 行）
-        gwrap = BoxLayout(orientation='vertical', spacing=2, size_hint_y=None, height='174dp')
-        g = GridLayout(cols=2, spacing=6, size_hint_y=None, height='132dp')
+        gwrap = BoxLayout(orientation='vertical', spacing=2, size_hint_y=None, height='170dp')
+        g = GridLayout(cols=2, spacing=4, size_hint_y=None, height='128dp')
         g.add_widget(self._mk_btn('单机起飞', OK, lambda: self._confirm(
             '单机起飞', '%s 按 %s m 起飞？' % (self._sel_name(), self._tof_alt()),
             lambda: self._single_act('起飞', self.fleet.takeoff, self._tof_alt())),
-            font_size='17sp', height='40dp'))
+            font_size='17sp', height='40dp', radius='16dp'))
         g.add_widget(self._mk_btn('单机降落', OK, lambda: self._confirm(
             '单机降落', '%s 立即降落？' % self._sel_name(),
             lambda: self._single_act('降落', self.fleet.land)),
-            font_size='17sp', height='40dp'))
+            font_size='17sp', height='40dp', radius='16dp'))
         g.add_widget(self._mk_btn('单机解锁', ACCENT, lambda: self._confirm(
             '单机解锁', '%s 解锁？' % self._sel_name(),
             lambda: self._single_act('解锁', self.fleet.arm, True)),
-            font_size='17sp', height='40dp'))
+            font_size='17sp', height='40dp', radius='16dp'))
         g.add_widget(self._mk_btn('单机上锁', ACCENT, lambda: self._confirm(
             '单机上锁', '%s 上锁（仅地面）？' % self._sel_name(),
             lambda: self._single_act('上锁', self.fleet.arm, False)),
-            font_size='17sp', height='40dp'))
+            font_size='17sp', height='40dp', radius='16dp'))
         g.add_widget(self._mk_btn('单机返航', DANGER, lambda: self._confirm(
             '单机返航', '%s 返航 RTL？' % self._sel_name(),
             lambda: self._single_act('返航', self.fleet.rtl)),
-            font_size='17sp', height='40dp'))
+            font_size='17sp', height='40dp', radius='16dp'))
         g.add_widget(self._mk_btn('单机投弹', DANGER, lambda: self._confirm(
             '单机投弹', '%s 投弹（舵机6 PWM2000）？' % self._sel_name(),
             lambda: self._single_act('投弹', self.fleet.bomb)),
-            font_size='17sp', height='40dp'))
+            font_size='17sp', height='40dp', radius='16dp'))
         gwrap.add_widget(g)
 
         # 底部固定：本机切模式（醒目蓝色大按钮，始终可点；前面无占位空白）
         # 模式开关组：本机全部切模式控件统一归置（切自动/悬停/接自动 一行平铺，始终可点）
         r4 = GridLayout(cols=2, spacing=6, size_hint_y=None, height='40dp')
         r4.add_widget(self._mk_btn('自动', (0.95, 0.72, 0.34, 1), self._on_single_auto,
-                                   size_hint_x=0.5, font_size='14sp', height='40dp'))
+                                   size_hint_x=0.5, font_size='14sp', height='40dp',
+                                   radius='16dp'))
         r4.add_widget(self._mk_btn('悬停', (0.95, 0.72, 0.34, 1), self._on_single_loiter,
-                                   size_hint_x=0.5, font_size='14sp', height='40dp'))
+                                   size_hint_x=0.5, font_size='14sp', height='40dp',
+                                   radius='16dp'))
         gwrap.add_widget(r4)
         b.add_widget(gwrap)
         # 本机高度/本机速度——蓝色圆角毛玻璃框（同①页全队行）+ m/m/s 灰色小毛玻璃框
