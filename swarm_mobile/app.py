@@ -804,7 +804,7 @@ class SwarmMobileApp(App):
         r3.add_widget(self._mk_btn('坐标换算', (0.55, 0.4, 0.2, 1),
                                    self._on_open_coord, font_size='15sp',
                                    height='40dp'))
-        r3.add_widget(self._mk_btn('加航点', ACCENT, self._on_add_wp,
+        r3.add_widget(self._mk_btn('添加航点', ACCENT, self._on_add_wp,
                                    font_size='15sp', height='40dp'))
         r3.add_widget(self._mk_btn('插投弹', DANGER, self._on_add_bomb,
                                    font_size='15sp', height='40dp'))
@@ -820,7 +820,7 @@ class SwarmMobileApp(App):
             self._on_upload_mission), size_hint_x=0.2, font_size='13sp', height='40dp'))
         r1.add_widget(self._mk_btn('读取航线', ACCENT, self._on_read_route,
                                    size_hint_x=0.2, font_size='13sp', height='40dp'))
-        r1.add_widget(self._mk_btn('读取航点', ACCENT, self._on_read_wp,
+        r1.add_widget(self._mk_btn('定位飞机', ACCENT, self._on_locate_vehicle,
                                    size_hint_x=0.2, font_size='13sp', height='40dp'))
         r1.add_widget(self._mk_btn('清除任务', GRAY, self._on_clear_mission,
                                    size_hint_x=0.2, font_size='13sp', height='40dp'))
@@ -874,6 +874,20 @@ class SwarmMobileApp(App):
         self._append_log('正在下载 %s 任务…' % self._sel_name())
         self.fleet.download_mission(self._mission_sysid())
 
+    def _on_locate_vehicle(self, *_a):
+        """定位飞机：地图中心移到当前选中机位置并放大"""
+        sid = self._sel_sysid()
+        v = self.fleet.vehicle(sid)
+        if not v or not getattr(v, 'online', False) or v.lat is None:
+            self._append_log('定位：%s号机 无GPS/离线' % sid)
+            return
+        try:
+            self._map_page._center = (v.lat, v.lon)
+            self._map_page._zoom = 16
+            self._map_page._rebuild()
+            self._append_log('定位：%s号机 (%.6f, %.6f)' % (sid, v.lat, v.lon))
+        except Exception as e:
+            self._append_log('定位失败：%s' % e)
     def _on_read_route(self, _x):
         if not self.fleet.connected:
             self._append_log('未连接')
