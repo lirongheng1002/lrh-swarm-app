@@ -19,7 +19,9 @@ from kivy.config import Config
 from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
@@ -225,21 +227,21 @@ class SwarmMobileApp(App):
 
         # ---- 顶部固定区 ----
         # 顶部：连接行（IP+端口+连接+断开 一行）+ 状态行 + 卫星行（两行 5+5，间隔小、机号红/颗数绿）
-        top = BoxLayout(orientation='vertical', size_hint_y=None, height='128dp', spacing=3)
-        row1 = BoxLayout(orientation='horizontal', spacing=4, size_hint_y=None, height=INPUT_H)
+        top = BoxLayout(orientation='vertical', size_hint_y=None, height='147dp', spacing=3)
+        row1 = BoxLayout(orientation='horizontal', spacing=4, size_hint_y=None, height='32dp')
         self._host_in = CompactTextInput(text=str(self.cfg.get('server', {}).get('host', '')),
                                          hint_text='服务器IP', size_hint_x=0.48,
-                                         halign='center')
+                                         font_size='13sp', halign='center')
         self._port_in = CompactTextInput(text=str(self.cfg.get('server', {}).get('per_port_base', 15551)),
                                          hint_text='端口', input_filter='int',
-                                         size_hint_x=0.16, halign='center')
+                                         size_hint_x=0.16, font_size='13sp', halign='center')
         self._autocenter(self._host_in)
         self._autocenter(self._port_in)
-        self._btn_conn = RoundedButton(text='连接', font_size='15sp',
+        self._btn_conn = RoundedButton(text='连接', font_size='13sp',
                                        background_color=ACCENT,
                                        size_hint_x=0.18, radius='8dp')
         self._btn_conn.bind(on_release=self._on_connect)
-        self._btn_disc = RoundedButton(text='断开', font_size='15sp',
+        self._btn_disc = RoundedButton(text='断开', font_size='13sp',
                                        background_color=(0.55, 0.55, 0.55, 1),
                                        size_hint_x=0.18, radius='8dp')
         self._btn_disc.bind(on_release=self._on_disconnect)
@@ -249,21 +251,21 @@ class SwarmMobileApp(App):
         row1.add_widget(self._btn_disc)
         top.add_widget(row1)
 
-        row2 = BoxLayout(orientation='horizontal', spacing=4, size_hint_y=None, height='34dp')
-        self._lbl_lock = Label(text='上锁', font_size='15sp', halign='center',
+        row2 = BoxLayout(orientation='horizontal', spacing=4, size_hint_y=None, height='26dp')
+        self._lbl_lock = Label(text='上锁', font_size='13sp', halign='center',
                                valign='middle', size_hint_x=0.2, color=GRAY)
-        self._lbl_status = Label(text='状态：未连接', font_size='15sp', halign='left',
+        self._lbl_status = Label(text='状态：未连接', font_size='13sp', halign='left',
                                  valign='middle', size_hint_x=0.44)
-        self._lbl_fm = Label(text='编队:关', font_size='15sp', halign='center', valign='middle',
+        self._lbl_fm = Label(text='编队:关', font_size='13sp', halign='center', valign='middle',
                              color=GRAY, size_hint_x=0.36)
         row2.add_widget(self._lbl_lock)
         row2.add_widget(self._lbl_status)
         row2.add_widget(self._lbl_fm)
         top.add_widget(row2)
 
-        # 卫星行：10 机两行（5+5）GridLayout，间隔小、不左右滑（机号红/颗数绿见刷新方法）
+        # 卫星行：10 机两行（5+5），每格 = 机号+颗数（上）+ 该机飞行模式（下）
         self._sat_box = GridLayout(cols=5, spacing=3, size_hint_y=None,
-                                   height='46dp', padding=(4, 2))
+                                   height='80dp', padding=(4, 2))
         top.add_widget(self._sat_box)
         root.add_widget(top)
 
@@ -273,18 +275,18 @@ class SwarmMobileApp(App):
         #      导致切到第2栏后切不回/整页点不动，地图与航线窗口全无响应）----
         # 导航栏固定在 root，不参与页面滚动；始终可点击。
         nav = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None,
-                        height='46dp', padding=(2, 2))
-        self._btn_p1 = RoundedButton(text='① 全部飞机', font_size='15sp',
-                                     background_color=ACCENT, radius='10dp')
-        self._btn_p2 = RoundedButton(text='② 单架飞机', font_size='15sp',
+                        height='32dp', padding=(2, 2))
+        self._btn_p1 = RoundedButton(text='全部飞机', font_size='13sp',
+                                     background_color=ACCENT, radius='8dp')
+        self._btn_p2 = RoundedButton(text='单架飞机', font_size='13sp',
                                      background_color=(0.35, 0.35, 0.35, 1),
-                                     radius='10dp')
-        self._btn_p3 = RoundedButton(text='③ 任务航线', font_size='15sp',
+                                     radius='8dp')
+        self._btn_p3 = RoundedButton(text='任务航线', font_size='13sp',
                                      background_color=(0.35, 0.35, 0.35, 1),
-                                     radius='10dp')
-        self._btn_p4 = RoundedButton(text='④ 运行日志', font_size='15sp',
+                                     radius='8dp')
+        self._btn_p4 = RoundedButton(text='运行日志', font_size='13sp',
                                      background_color=(0.35, 0.35, 0.35, 1),
-                                     radius='10dp')
+                                     radius='8dp')
         self._btn_p1.bind(on_release=lambda _x: self._switch_page(0))
         self._btn_p2.bind(on_release=lambda _x: self._switch_page(1))
         self._btn_p3.bind(on_release=lambda _x: self._switch_page(2))
@@ -314,20 +316,27 @@ class SwarmMobileApp(App):
         body1.add_widget(BoxLayout(size_hint_y=1))
 
         # ---- 页③ 任务航线：上面=高德卫星地图（占 65%，重点！地图一定要大），下面=全部功能区贴底（占 35%）----
-        body2 = BoxLayout(orientation='vertical', spacing=6, padding=(2, 2))
+        body2 = BoxLayout(orientation='vertical', spacing=0, padding=(2, 2))
+        # 地图 + 航线覆盖层（RelativeLayout 相对叠加：地图在下、航线在上）
+        map_holder = RelativeLayout(size_hint_y=1)
         self._map_page = mapview.MapPage(center=self._map_default_center(),
                                          zoom=14, embedded=True,
                                          on_pick=self._on_map_pick_embed,
                                          on_double_tap=self._on_map_double_tap)
-        self._map_page.size_hint_y = 0.38
-        body2.add_widget(self._map_page)
+        self._map_page.size_hint = (1, 1)
+        map_holder.add_widget(self._map_page)
+        self._map_route_layer = mapview._RouteLayer(self._map_page)
+        self._map_route_layer.size_hint = (1, 1)
+        map_holder.add_widget(self._map_route_layer)
+        body2.add_widget(map_holder)
+        self._map_page._drag_cb = self._on_point_drag
         # 任务表显示在地图下方（读取航线信息：序号/指令/位置/高度m/悬停s）
-        self._mission_scroll = ScrollView(size_hint_y=None, height='96dp')
-        self._mission_box = BoxLayout(orientation='vertical', spacing=2, size_hint_y=None)
+        self._mission_scroll = ScrollView(size_hint_y=None, height='98dp')
+        self._mission_box = BoxLayout(orientation='vertical', spacing=0, size_hint_y=None)
         self._mission_box.bind(minimum_height=self._mission_box.setter('height'))
         self._mission_scroll.add_widget(self._mission_box)
         body2.add_widget(self._mission_scroll)
-        bottom = BoxLayout(orientation='vertical', spacing=1, size_hint_y=0.40)
+        bottom = BoxLayout(orientation='vertical', spacing=1, size_hint_y=None, height='132dp')
         bottom.add_widget(self._build_mission())
         body2.add_widget(bottom)
 
@@ -423,9 +432,9 @@ class SwarmMobileApp(App):
             '全部投弹', '对全部 N 架同时发投弹指令（舵机6 PWM2000）？',
             lambda: self._swarm_act('投弹', self.fleet.bomb_all)),
             font_size='15sp'))
-        g.add_widget(self._mk_btn('切自动任务', ACCENT, lambda: self._swarm_act(
+        g.add_widget(self._mk_btn('自动任务', ACCENT, lambda: self._swarm_act(
             '切自动', self.fleet.auto_all), font_size='15sp'))
-        g.add_widget(self._mk_btn('全部切模式', ACCENT, self._on_all_mode_btn,
+        g.add_widget(self._mk_btn('全部模式', ACCENT, self._on_all_mode_btn,
                                   font_size='15sp'))
 
         # 行3/行4（全队高度/全队速度）拆出网格成独立整行——见下方 wrap 内重建
@@ -437,49 +446,39 @@ class SwarmMobileApp(App):
         # 上方功能按钮区与全队高度/速度行整体明显分开（领导：与上面任务栏不重叠）
         wrap.add_widget(Label(text='', size_hint_y=None, height='28dp'))
         # 蓝色圆角毛玻璃框：全队高度 + 全队速度 两行整体框起（领导）
-        bfm = GlassPanel(orientation='vertical', spacing=8, padding=(10, 8),
-                         size_hint_y=None, height='104dp',
-                         bg=(0.25, 0.45, 0.85, 0.16), border=(0.4, 0.65, 1, 0.6),
-                         radius='12dp')
+        bfm = BoxLayout(orientation='vertical', spacing=8, padding=(0, 8),
+                        size_hint_y=None, height='104dp')
         # 行3：全队高度——输入框横拉铺满（领导：与按钮同高40dp）
         r3 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
-        r3.add_widget(Label(text='全队高度', font_size='14sp', size_hint_x=0.14,
-                            halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
+        _bh1 = self._mk_btn('全队高度', ACCENT, lambda *a: None,
+                            size_hint_x=0.20, height='40dp', font_size='14sp', radius='8dp')
+        r3.add_widget(_bh1)
         self._fm_alt = CompactTextInput(text='30', input_filter='float', font_size='18sp',
-                                        size_hint_x=0.52, size_hint_y=None,
+                                        size_hint_x=0.34, size_hint_y=None,
                                         height='40dp', halign='center')
         r3.add_widget(self._fm_alt)
-        # 单位 m：灰色毛玻璃小框（领导：单位用灰框）
-        gm = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
-                        height='40dp', padding=(2, 0), spacing=0,
-                        bg=(0.6, 0.62, 0.66, 0.16), border=(0.6, 0.62, 0.66, 0.5),
-                        radius='8dp', border_width='1dp')
-        gm.add_widget(Label(text='m', font_size='14sp', halign='center',
-                            valign='middle', color=(0.75, 0.75, 0.75, 1)))
+        # 单位 m：红色按钮
+        gm = self._mk_btn('m', DANGER, lambda *a: None, size_hint_x=0.12,
+                       height='40dp', font_size='14sp', radius='8dp')
         r3.add_widget(gm)
         r3.add_widget(self._mk_btn('确定', OK, self._on_confirm_fm_alt,
-                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
-        r3.add_widget(Label(text='', size_hint_x=0.06))
+                                   size_hint_x=0.34, font_size='14sp', height='40dp'))
         bfm.add_widget(r3)
         # 行4：全队速度——独立整行
         r4 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
-        r4.add_widget(Label(text='全队速度', font_size='14sp', size_hint_x=0.14,
-                            halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
+        _bh2 = self._mk_btn('全队速度', ACCENT, lambda *a: None,
+                            size_hint_x=0.20, height='40dp', font_size='14sp', radius='8dp')
+        r4.add_widget(_bh2)
         self._spd_all = CompactTextInput(text='10', input_filter='float', font_size='18sp',
-                                         size_hint_x=0.52, size_hint_y=None,
+                                         size_hint_x=0.34, size_hint_y=None,
                                          height='40dp', halign='center')
         r4.add_widget(self._spd_all)
-        # 单位 m/s：灰色毛玻璃小框
-        gms = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
-                         height='40dp', padding=(2, 0), spacing=0,
-                         bg=(0.6, 0.62, 0.66, 0.16), border=(0.6, 0.62, 0.66, 0.5),
-                         radius='8dp', border_width='1dp')
-        gms.add_widget(Label(text='m/s', font_size='13sp', halign='center',
-                             valign='middle', color=(0.75, 0.75, 0.75, 1)))
+        # 单位 m/s：红色按钮
+        gms = self._mk_btn('m/s', DANGER, lambda *a: None, size_hint_x=0.12,
+                          height='40dp', font_size='13sp', radius='8dp')
         r4.add_widget(gms)
         r4.add_widget(self._mk_btn('发送', OK, self._on_confirm_speed_all,
-                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
-        r4.add_widget(Label(text='', size_hint_x=0.06))
+                                   size_hint_x=0.34, font_size='14sp', height='40dp'))
         bfm.add_widget(r4)
         wrap.add_widget(bfm)
         return wrap
@@ -527,19 +526,18 @@ class SwarmMobileApp(App):
                       size_hint_y=None, height='232dp')
         # 领导要求：队形区不再重复全队高度（①网格已有，编队/返航都读①的 _fm_alt）
         # 蓝色圆角毛玻璃框：前后/左右/小组 行整体框起（领导）
-        gr2 = GlassPanel(orientation='horizontal', spacing=8, padding=(10, 6),
-                         size_hint_y=None, height='52dp',
-                         bg=(0.25, 0.45, 0.85, 0.16), border=(0.4, 0.65, 1, 0.6),
-                         radius='12dp')
+        gr2 = BoxLayout(orientation='horizontal', spacing=8, padding=(10, 6),
+                        size_hint_y=None, height='52dp')
         r2 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
-        r2.add_widget(Label(text='前后/左右/小组m', font_size='13sp', size_hint_x=0.24,
-                            halign='left', valign='middle'))
+        _bh3 = self._mk_btn('前后/左右/小组m', ACCENT, lambda *a: None,
+                            size_hint_x=0.32, height='40dp', font_size='14sp', radius='8dp')
+        r2.add_widget(_bh3)
         r2.add_widget(CompactTextInput(text=str(self.cfg['formation'].get('spacing_f', 5)),
-                                       input_filter='float', font_size='18sp', size_hint_x=0.2))
+                                       input_filter='float', font_size='18sp', size_hint_x=0.16))
         r2.add_widget(CompactTextInput(text=str(self.cfg['formation'].get('spacing_l', 5)),
-                                       input_filter='float', font_size='18sp', size_hint_x=0.2))
+                                       input_filter='float', font_size='18sp', size_hint_x=0.16))
         r2.add_widget(CompactTextInput(text=str(self.cfg['formation'].get('spacing_g', 10)),
-                                       input_filter='float', font_size='18sp', size_hint_x=0.2))
+                                       input_filter='float', font_size='18sp', size_hint_x=0.16))
         gr2.add_widget(r2)
         b.add_widget(gr2)
         r3 = BoxLayout(orientation='horizontal', spacing=0, size_hint_y=None, height='48dp')
@@ -588,10 +586,8 @@ class SwarmMobileApp(App):
         b = BoxLayout(orientation='vertical', spacing=4, padding=(6, 0),
                       size_hint_y=None, height='422dp')
         # 选机行
-        top = GlassPanel(orientation='horizontal', spacing=8, padding=(10, 4),
-                         size_hint_y=None, height='40dp',
-                         bg=(0.25, 0.45, 0.85, 0.16), border=(0.4, 0.65, 1, 0.6),
-                         radius='12dp')
+        top = BoxLayout(orientation='horizontal', spacing=8, padding=(10, 4),
+                        size_hint_y=None, height='40dp')
         self._sp_sys = Spinner(text='1号机', values=['%d号机' % i for i in range(1, 11)],
                                font_size='16sp', size_hint_x=0.36)
         self._sp_sys.bind(text=self._on_sys_changed)
@@ -599,7 +595,7 @@ class SwarmMobileApp(App):
                               valign='middle', size_hint_x=0.64)
         top.add_widget(self._sp_sys)
         top.add_widget(self._lbl_veh)
-        b.add_widget(Label(text='二、单机操作', font_size='18sp', bold=True,
+        b.add_widget(Label(text='三、单机操作', font_size='18sp', bold=True,
                            color=(0.18, 0.4, 0.72, 1), size_hint_y=None, height='22dp',
                            halign='left', valign='middle'))
         b.add_widget(top)
@@ -609,85 +605,66 @@ class SwarmMobileApp(App):
         # （领导：删占位空白——全部控件上移贴紧，不留大片空白）
 
         # 控制按钮区（2 列 3 行）
-        gwrap = BoxLayout(orientation='vertical', spacing=2, size_hint_y=None, height='174dp')
-        g = GridLayout(cols=2, spacing=6, size_hint_y=None, height='132dp')
+        gwrap = BoxLayout(orientation='vertical', spacing=2, size_hint_y=None, height='178dp')
+        g = GridLayout(cols=2, spacing=6, size_hint_y=None, height='178dp')
         g.add_widget(self._mk_btn('单机起飞', OK, lambda: self._confirm(
             '单机起飞', '%s 按 %s m 起飞？' % (self._sel_name(), self._tof_alt()),
             lambda: self._single_act('起飞', self.fleet.takeoff, self._tof_alt())),
-            font_size='17sp', height='40dp', radius='16dp'))
+            font_size='16sp', height='40dp', radius='16dp'))
         g.add_widget(self._mk_btn('单机降落', OK, lambda: self._confirm(
             '单机降落', '%s 立即降落？' % self._sel_name(),
             lambda: self._single_act('降落', self.fleet.land)),
-            font_size='17sp', height='40dp', radius='16dp'))
+            font_size='16sp', height='40dp', radius='16dp'))
         g.add_widget(self._mk_btn('单机解锁', ACCENT, lambda: self._confirm(
             '单机解锁', '%s 解锁？' % self._sel_name(),
             lambda: self._single_act('解锁', self.fleet.arm, True)),
-            font_size='17sp', height='40dp', radius='16dp'))
+            font_size='16sp', height='40dp', radius='16dp'))
         g.add_widget(self._mk_btn('单机上锁', ACCENT, lambda: self._confirm(
             '单机上锁', '%s 上锁（仅地面）？' % self._sel_name(),
             lambda: self._single_act('上锁', self.fleet.arm, False)),
-            font_size='17sp', height='40dp', radius='16dp'))
+            font_size='16sp', height='40dp', radius='16dp'))
         g.add_widget(self._mk_btn('单机返航', DANGER, lambda: self._confirm(
             '单机返航', '%s 返航 RTL？' % self._sel_name(),
             lambda: self._single_act('返航', self.fleet.rtl)),
-            font_size='17sp', height='40dp', radius='16dp'))
+            font_size='16sp', height='40dp', radius='16dp'))
         g.add_widget(self._mk_btn('单机投弹', DANGER, lambda: self._confirm(
             '单机投弹', '%s 投弹（舵机6 PWM2000）？' % self._sel_name(),
             lambda: self._single_act('投弹', self.fleet.bomb)),
-            font_size='17sp', height='40dp', radius='16dp'))
+            font_size='16sp', height='40dp', radius='16dp'))
+        g.add_widget(self._mk_btn('自动', (0.95, 0.72, 0.34, 1), self._on_single_auto,
+                                  font_size='16sp', height='40dp', radius='16dp'))
+        g.add_widget(self._mk_btn('悬停', (0.95, 0.72, 0.34, 1), self._on_single_loiter,
+                                  font_size='16sp', height='40dp', radius='16dp'))
         gwrap.add_widget(g)
-
-        # 底部固定：本机切模式（醒目蓝色大按钮，始终可点；前面无占位空白）
-        # 模式开关组：本机全部切模式控件统一归置（切自动/悬停/接自动 一行平铺，始终可点）
-        r4 = GridLayout(cols=2, spacing=6, size_hint_y=None, height='40dp')
-        r4.add_widget(self._mk_btn('自动', (0.95, 0.72, 0.34, 1), self._on_single_auto,
-                                   size_hint_x=0.5, font_size='14sp', height='40dp',
-                                   radius='16dp'))
-        r4.add_widget(self._mk_btn('悬停', (0.95, 0.72, 0.34, 1), self._on_single_loiter,
-                                   size_hint_x=0.5, font_size='14sp', height='40dp',
-                                   radius='16dp'))
-        gwrap.add_widget(r4)
         b.add_widget(gwrap)
         # 本机高度/本机速度——蓝色圆角毛玻璃框（同①页全队行）+ m/m/s 灰色小毛玻璃框
-        bpar = GlassPanel(orientation='vertical', spacing=6, padding=(10, 4),
-                          size_hint_y=None, height='104dp',
-                          bg=(0.25, 0.45, 0.85, 0.16), border=(0.4, 0.65, 1, 0.6),
-                          radius='12dp')
+        bpar = BoxLayout(orientation='vertical', spacing=6, padding=(0, 8),
+                         size_hint_y=None, height='104dp')
         rh = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
-        rh.add_widget(Label(text='本机高度', font_size='14sp', size_hint_x=0.14,
-                            halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
+        rh.add_widget(self._mk_btn('本机高度', ACCENT, lambda *a: None,
+                                   size_hint_x=0.20, height='40dp', font_size='14sp', radius='8dp'))
         self._alt_one = CompactTextInput(text='30', input_filter='float', font_size='18sp',
-                                         size_hint_x=0.52, size_hint_y=None,
+                                         size_hint_x=0.34, size_hint_y=None,
                                          height='40dp', halign='center')
         rh.add_widget(self._alt_one)
-        gm2 = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
-                         height='40dp', padding=(2, 0), spacing=0,
-                         bg=(0.6, 0.62, 0.66, 0.16), border=(0.6, 0.62, 0.66, 0.5),
-                         radius='8dp', border_width='1dp')
-        gm2.add_widget(Label(text='m', font_size='14sp', halign='center',
-                             valign='middle', color=(0.75, 0.75, 0.75, 1)))
+        gm2 = self._mk_btn('m', DANGER, lambda *a: None, size_hint_x=0.12,
+                           height='40dp', font_size='14sp', radius='8dp')
         rh.add_widget(gm2)
         rh.add_widget(self._mk_btn('确认', OK, self._on_confirm_alt_one,
-                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
-        rh.add_widget(Label(text='', size_hint_x=0.06))
+                                   size_hint_x=0.34, font_size='14sp', height='40dp'))
         bpar.add_widget(rh)
         rs = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
-        rs.add_widget(Label(text='本机速度', font_size='14sp', size_hint_x=0.14,
-                            halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
+        rs.add_widget(self._mk_btn('本机速度', ACCENT, lambda *a: None,
+                                   size_hint_x=0.20, height='40dp', font_size='14sp', radius='8dp'))
         self._spd_one = CompactTextInput(text='5', input_filter='float', font_size='18sp',
-                                         size_hint_x=0.52, size_hint_y=None,
+                                         size_hint_x=0.34, size_hint_y=None,
                                          height='40dp', halign='center')
         rs.add_widget(self._spd_one)
-        gms2 = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
-                          height='40dp', padding=(2, 0), spacing=0,
-                          bg=(0.6, 0.62, 0.66, 0.16), border=(0.6, 0.62, 0.66, 0.5),
-                          radius='8dp', border_width='1dp')
-        gms2.add_widget(Label(text='m/s', font_size='12sp', halign='center',
-                              valign='middle', color=(0.75, 0.75, 0.75, 1)))
+        gms2 = self._mk_btn('m/s', DANGER, lambda *a: None, size_hint_x=0.12,
+                            height='40dp', font_size='13sp', radius='8dp')
         rs.add_widget(gms2)
         rs.add_widget(self._mk_btn('确认', OK, self._on_confirm_speed_one,
-                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
-        rs.add_widget(Label(text='', size_hint_x=0.06))
+                                   size_hint_x=0.34, font_size='14sp', height='40dp'))
         bpar.add_widget(rs)
         b.add_widget(BoxLayout(size_hint_y=None, height='4dp'))
         b.add_widget(bpar)
@@ -770,66 +747,63 @@ class SwarmMobileApp(App):
     # ---------------- 四、任务航点 ----------------
     def _build_mission(self):
         """任务航线页控件区：输入框紧凑，按钮圆润，功能分区。"""
-        b = GlassPanel(orientation='vertical', spacing=4, size_hint_y=None,
-                       height='182dp', padding=(8, 2), bg=(0.25, 0.45, 0.85, 0.16),
-                       border=(0.4, 0.65, 1, 0.6), radius='12dp')
+        b = BoxLayout(orientation='vertical', spacing=4, size_hint_y=1,
+                      padding=(8, 2))
         # 目标机行：航点/任务都发给这架（领导：加航点必须明确是几号机）
-        rt = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='50dp')
+        rt = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
         self._sp_tgt = Spinner(text='1号机', values=['%d号机' % i for i in range(1, 11)],
-                               font_size='15sp', size_hint_x=0.25, size_hint_y=None, height='50dp')
+                               font_size='15sp', size_hint_x=0.25, size_hint_y=None, height='40dp')
         rt.add_widget(self._sp_tgt)
         bx = BoxLayout(orientation='vertical', spacing=1, size_hint_x=0.25)
         self._wp_lat = CompactTextInput(hint_text='', input_filter='float',
-                                        size_hint_y=None, height='32dp', halign='center')
+                                        size_hint_y=None, height='24dp', halign='center')
         bx.add_widget(self._wp_lat)
-        bx.add_widget(Label(text='纬度', font_size='14sp', size_hint_y=None, height='16dp',
+        bx.add_widget(Label(text='纬度', font_size='14sp', size_hint_y=None, height='14dp',
                             halign='center', valign='middle', color=(0.7, 0.75, 0.7, 1)))
         rt.add_widget(bx)
         by = BoxLayout(orientation='vertical', spacing=1, size_hint_x=0.25)
         self._wp_lon = CompactTextInput(hint_text='', input_filter='float',
-                                        size_hint_y=None, height='32dp', halign='center')
+                                        size_hint_y=None, height='24dp', halign='center')
         by.add_widget(self._wp_lon)
-        by.add_widget(Label(text='经度', font_size='14sp', size_hint_y=None, height='16dp',
+        by.add_widget(Label(text='经度', font_size='14sp', size_hint_y=None, height='14dp',
                             halign='center', valign='middle', color=(0.7, 0.75, 0.7, 1)))
         rt.add_widget(by)
         bz = BoxLayout(orientation='vertical', spacing=1, size_hint_x=0.25)
         self._wp_alt = CompactTextInput(hint_text='', input_filter='float',
-                                        size_hint_y=None, height='32dp', halign='center')
+                                        size_hint_y=None, height='24dp', halign='center')
         bz.add_widget(self._wp_alt)
-        bz.add_widget(Label(text='高度m', font_size='14sp', size_hint_y=None, height='16dp',
+        bz.add_widget(Label(text='高度m', font_size='14sp', size_hint_y=None, height='14dp',
                             halign='center', valign='middle', color=(0.7, 0.75, 0.7, 1)))
         rt.add_widget(bz)
         b.add_widget(rt)
 
-        # 功能按钮 4 等份：全屏地图/坐标换算/加航点/插投弹（加航点在全屏地图下方、插投弹在坐标换算下方）
-        r3 = GridLayout(cols=2, spacing=4, size_hint_y=None, height='84dp',
+        # 功能按钮 4 等份：全屏地图/坐标换算/添加航点/添加投弹 一行平铺
+        r3 = GridLayout(cols=4, spacing=4, size_hint_y=None, height='40dp',
                         padding=(0, 0))
         r3.add_widget(self._mk_btn('全屏地图', (0.15, 0.6, 0.35, 1),
-                                   self._on_open_map, font_size='15sp',
+                                   self._on_open_map, font_size='14sp',
                                    height='40dp'))
         r3.add_widget(self._mk_btn('坐标换算', (0.55, 0.4, 0.2, 1),
-                                   self._on_open_coord, font_size='15sp',
+                                   self._on_open_coord, font_size='14sp',
                                    height='40dp'))
         r3.add_widget(self._mk_btn('添加航点', ACCENT, self._on_add_wp,
-                                   font_size='15sp', height='40dp'))
-        r3.add_widget(self._mk_btn('插投弹', DANGER, self._on_add_bomb,
-                                   font_size='15sp', height='40dp'))
+                                   font_size='14sp', height='40dp'))
+        r3.add_widget(self._mk_btn('添加投弹', DANGER, self._on_add_bomb,
+                                   font_size='14sp', height='40dp'))
         b.add_widget(r3)
 
-        # 最底行：下载任务 / 上传任务 / 读取航线 / 读取航点 / 清除任务
+        # 最底行：上传任务 / 读取航线 / 定位飞机 / 清除任务（4 个平铺）
         r1 = BoxLayout(orientation='horizontal', spacing=5,
                        size_hint_y=None, height='40dp')
-        r1.add_widget(self._mk_btn('下载任务', ACCENT, self._on_download_mission,
-                                   size_hint_x=0.2, font_size='13sp', height='40dp'))
         r1.add_widget(self._mk_btn('上传任务', ACCENT, lambda: self._confirm(
             '上传任务', '把当前任务（%d 条）写入 %s？' % (self._mission_len(), self._sel_name()),
-            self._on_upload_mission), size_hint_x=0.2, font_size='13sp', height='40dp'))
+            self._on_upload_mission), size_hint_x=0.25, font_size='13sp', height='40dp'))
         r1.add_widget(self._mk_btn('读取航线', ACCENT, self._on_read_route,
-                                   size_hint_x=0.2, font_size='13sp', height='40dp'))
+                                   size_hint_x=0.25, font_size='13sp', height='40dp'))
         r1.add_widget(self._mk_btn('定位飞机', ACCENT, self._on_locate_vehicle,
-                                   size_hint_x=0.2, font_size='13sp', height='40dp'))
+                                   size_hint_x=0.25, font_size='13sp', height='40dp'))
         r1.add_widget(self._mk_btn('清除任务', GRAY, self._on_clear_mission,
-                                   size_hint_x=0.2, font_size='13sp', height='40dp'))
+                                   size_hint_x=0.25, font_size='13sp', height='40dp'))
         b.add_widget(r1)
 
         return b
@@ -843,41 +817,113 @@ class SwarmMobileApp(App):
         Clock.schedule_once(lambda _dt: self._refresh_mission_table_impl(), 0)
 
     def _refresh_mission_table_impl(self):
+        """任务信息：对齐表格（序号/指令/位置/高度m/悬停s），行可点选"""
         v = self.fleet.vehicle(self._mission_sysid())
         rows = v.mission if v else []
         self._mission_box.clear_widgets()
         sel = self._sel_seq
-        # 表头：序号 / 指令 / 位置 / 高度m / 悬停s
-        hd = GridLayout(cols=5, spacing=2, size_hint_y=None, height='26dp')
-        for h in ('序号', '指令', '位置', '高度m', '悬停s'):
-            hd.add_widget(Label(text=h, font_size='13sp', bold=True,
-                                halign='center', valign='middle'))
+        cols = (('序号', 0.10), ('指令', 0.18), ('位置', 0.36), ('高度m', 0.14), ('悬停s', 0.22))
+        # 表头
+        hd = BoxLayout(orientation='horizontal', spacing=0, size_hint_y=None, height='18dp')
+        for h, w in cols:
+            hd.add_widget(Label(text=h, font_size='12sp', bold=True, size_hint_x=w,
+                                halign='center', valign='middle', color=(0.7, 0.85, 0.7, 1)))
         self._mission_box.add_widget(hd)
         for it in rows:
             cmd = vehicles.MAV_CMD_ZH.get(it['cmd'], 'M%g' % it['cmd'])
+            if it.get('kind') == 'collect':
+                cmd = '集合点'
+            elif it.get('kind') == 'disperse':
+                cmd = '离散点'
             if it['cmd'] == 184:
                 pos = '--'
                 alt = '--'
                 hover = '%.0f' % it.get('param1', 0)
             else:
-                pos = '%.6f,%.6f' % (it['lat'], it['lon'])
+                pos = '%.4f,%.4f' % (it['lat'], it['lon'])
                 alt = '%.1f' % it['alt'] if it['alt'] else '--'
                 hover = '--'
-            txt = '#%d  %s  %s  %sm  %ss' % (it['seq'], cmd, pos, alt, hover)
-            row = RoundedButton(
-                text=txt, font_size='13sp', height='34dp', size_hint_y=None,
-                background_color=(0.35, 0.5, 0.35, 1) if sel == it['seq'] else
-                                 (0.25, 0.3, 0.38, 1),
-                radius='6dp')
-            row.bind(on_release=lambda _x, s=it['seq']: self._on_mission_row(s))
+            selrow = (sel == it['seq'])
+            row = BoxLayout(orientation='horizontal', spacing=0, size_hint_y=None, height='20dp')
+            for txt, w in ((str(it['seq']), 0.10), (cmd, 0.18), (pos, 0.36),
+                           (alt, 0.14), (hover, 0.22)):
+                lbl = Label(text=txt, font_size='12sp', size_hint_x=w,
+                            halign='center', valign='middle',
+                            color=(0.5, 0.9, 0.5, 1) if selrow else (0.85, 0.85, 0.85, 1))
+                row.add_widget(lbl)
+            row.on_touch_down = (lambda touch, s=it['seq'], r=row:
+                                 self._mission_row_touch(r, touch, s))
+            self._mission_box.add_widget(row)
+        # 补齐到 4 行（不足用空行占位，使表格固定显示 4 行）
+        for _ in range(max(0, 4 - len(rows))):
+            row = BoxLayout(orientation='horizontal', spacing=0, size_hint_y=None, height='20dp')
+            for w in (0.10, 0.18, 0.36, 0.14, 0.22):
+                row.add_widget(Label(text='--', font_size='12sp', size_hint_x=w,
+                                     halign='center', valign='middle',
+                                     color=(0.55, 0.55, 0.55, 1)))
             self._mission_box.add_widget(row)
         if not rows:
             self._mission_box.add_widget(Label(text='（任务为空——下载或设置航点）',
-                                               font_size='14sp', height='30dp', size_hint_y=None))
+                                               font_size='12sp', height='20dp', size_hint_y=None,
+                                               color=(0.6, 0.6, 0.6, 1)))
+        self._refresh_map_route()
+
+    def _refresh_map_route(self):
+        """把当前机任务航点画到地图上（圆点+相邻连线）"""
+        try:
+            v = self.fleet.vehicle(self._mission_sysid())
+            route = []
+            drag = []
+            if v:
+                for i, it in enumerate(getattr(v, 'mission', [])):
+                    lat = it.get('lat')
+                    lon = it.get('lon')
+                    if lat and lon and abs(lat) > 1 and abs(lon) > 1:
+                        route.append((lat, lon))
+                        drag.append((i, lat, lon))
+            self._map_route_layer.set_route(route)
+            self._map_page.set_draggable_points(drag)
+        except Exception:
+            pass
+
+    def _on_point_drag(self, ev, seq, lat, lon):
+        """长按拖动航点：实时改经纬，松手刷新"""
+        sid = self._mission_sysid()
+        v = self.fleet.vehicle(sid)
+        if not v or not v.mission or seq is None or seq >= len(v.mission):
+            return
+        if ev == 'start':
+            self._sel_seq = seq
+            self._refresh_mission_table()
+        elif ev in ('move', 'end'):
+            v.mission[seq]['lat'] = lat
+            v.mission[seq]['lon'] = lon
+            self._refresh_map_route()
+            if ev == 'end':
+                self._refresh_mission_table()
+                self._append_log('%s号机 #%s 航点已移动到 (%.6f, %.6f)' % (sid, seq, lat, lon))
+
+    def _refresh_map_aircraft(self):
+        """把有GPS的在线机位置画到地图（<8颗星灰点，>=8颗星蓝点）"""
+        try:
+            planes = []
+            for s in sorted(self.fleet.fleet):
+                v = self.fleet.fleet[s]
+                if getattr(v, 'online', False) and v.lat is not None and abs(v.lat) > 1:
+                    planes.append((s, v.lat, v.lon, getattr(v, 'satellites', None)))
+            self._map_route_layer.set_aircraft(planes)
+        except Exception:
+            pass
 
     def _on_mission_row(self, seq):
         self._sel_seq = seq
         self._refresh_mission_table()
+
+    def _mission_row_touch(self, row, touch, seq):
+        if row.collide_point(*touch.pos):
+            self._on_mission_row(seq)
+            return True
+        return False
 
     def _on_download_mission(self, _x):
         if not self.fleet.connected:
@@ -887,11 +933,20 @@ class SwarmMobileApp(App):
         self.fleet.download_mission(self._mission_sysid())
 
     def _on_locate_vehicle(self, *_a):
-        """定位飞机：地图中心移到当前选中机位置并放大"""
-        sid = self._sel_sysid()
+        """定位飞机：地图中心移到有GPS的机位置并放大
+        优先页③当前选中机；若无GPS则自动取第一架有GPS的在线机"""
+        sid = self._mission_sysid()
         v = self.fleet.vehicle(sid)
-        if not v or not getattr(v, 'online', False) or v.lat is None:
-            self._append_log('定位：%s号机 无GPS/离线' % sid)
+        if not (v and getattr(v, 'online', False) and v.lat is not None):
+            v = None
+            for cand_s in sorted(self.fleet.fleet):
+                cand = self.fleet.fleet[cand_s]
+                if getattr(cand, 'online', False) and cand.lat is not None:
+                    v = cand
+                    sid = cand_s
+                    break
+        if not v:
+            self._append_log('定位：无 有GPS 的在线飞机')
             return
         try:
             self._map_page._center = (v.lat, v.lon)
@@ -951,7 +1006,7 @@ class SwarmMobileApp(App):
 
     def _on_add_bomb(self, _x):
         if self._sel_seq is None:
-            self._append_log('请先在任务表点选一个航点，再「插投弹」')
+            self._append_log('请先在任务表点选一个航点，再「添加投弹」')
             return
         self.fleet.add_bomb_after(self._mission_sysid(), self._sel_seq)
         self._refresh_mission_table()
@@ -967,29 +1022,162 @@ class SwarmMobileApp(App):
         return (34.26, 108.94)
 
     def _on_map_pick_embed(self, lat, lng):
-        """内嵌地图取点：直接回填经纬（常显，不关闭）"""
+        """内嵌地图单击 = 回填经纬 + 直接加一个坐标点（航点）"""
         self._wp_lat.text = '%.6f' % lat
         self._wp_lon.text = '%.6f' % lng
-        self._append_log('地图取点 %.6f, %.6f —— 填好高度后点「加航点」' % (lat, lng))
+        try:
+            alt = float(self._wp_alt.text) if self._wp_alt.text.strip() else 100.0
+        except Exception:
+            alt = 100.0
+        sid = self._mission_sysid()
+        self.fleet.append_waypoint(sid, lat, lng, alt)
+        self._refresh_mission_table()
+        self._append_log('%s号机 已加航点 (%.6f, %.6f, %sm)——点「上传任务」写入飞机' % (
+            sid, lat, lng, alt))
 
     def _on_map_double_tap(self, lat, lng):
-        """地图双击：弹出任务菜单（投弹/清空航线/返航）——类似电脑端右键"""
+        """地图双击：航点功能菜单（设高度/悬停/集合/离散/投弹/返航/清除）"""
         sid = self._mission_sysid()
-        popup = Popup(title='任务菜单 · %s号机' % sid, size_hint=(0.88, 0.52),
+        v = self.fleet.vehicle(sid)
+        # 双击点附近(约5米/标记内)已有航点 → 直接对它开菜单（不加点不移点）
+        near = self._nearest_wp_seq_at(lat, lng, v)
+        seq = near if near is not None else self._sel_seq
+        if seq is None or not v or not v.mission or seq >= len(v.mission):
+            try:
+                alt = float(self._wp_alt.text) if self._wp_alt.text.strip() else 100.0
+            except Exception:
+                alt = 100.0
+            self.fleet.append_waypoint(sid, lat, lng, alt)
+            self._sel_seq = len(v.mission) - 1
+            self._refresh_mission_table()
+            seq = self._sel_seq
+        self._sel_seq = seq
+        it = v.mission[seq] if v and v.mission else {}
+        popup = Popup(title='功能菜单 · %s号机 #%s' % (sid, seq), size_hint=(0.9, 0.78),
                       auto_dismiss=True)
-        box = BoxLayout(orientation='vertical', spacing=8, padding=12)
-        box.add_widget(self._mk_btn('投弹（%s号机追加投弹点）' % sid, DANGER,
-                                    lambda: self._bomb_double_tap(sid, popup),
-                                    size_hint_y=None, height='50dp', font_size='16sp'))
-        box.add_widget(self._mk_btn('清空航线（%s号机）' % sid, GRAY,
-                                    lambda: self._clear_double_tap(sid, popup),
-                                    size_hint_y=None, height='50dp', font_size='16sp'))
-        box.add_widget(self._mk_btn('返航 RTL（%s号机）' % sid, ACCENT,
-                                    lambda: self._rtl_double_tap(sid, popup),
-                                    size_hint_y=None, height='50dp', font_size='16sp'))
+        box = BoxLayout(orientation='vertical', spacing=6, padding=12)
+        mk = lambda t, c, cb: self._mk_btn(t, c, cb, size_hint_y=None, height='44dp',
+                                           font_size='15sp')
+        box.add_widget(mk('① 设航点高度（当前 %sm）' % it.get('alt', 0), ACCENT,
+                          lambda: self._menu_alt(sid, seq, popup)))
+        box.add_widget(mk('② 悬停时间（当前 %ss）' % it.get('p1', 0), ACCENT,
+                          lambda: self._menu_hold(sid, seq, popup)))
+        kind = it.get('kind')
+        ktxt = '集合点' if kind == 'collect' else ('离散点' if kind == 'disperse' else '普通')
+        box.add_widget(mk('③ 设为集合点（当前:%s）' % ktxt, ACCENT,
+                          lambda: self._menu_kind(sid, seq, popup, 'collect')))
+        box.add_widget(mk('④ 设为离散点（当前:%s）' % ktxt, ACCENT,
+                          lambda: self._menu_kind(sid, seq, popup, 'disperse')))
+        box.add_widget(mk('⑤ 添加投弹任务（184）', DANGER,
+                          lambda: self._bomb_double_tap(sid, popup)))
+        box.add_widget(mk('⑥ 返航点 RTL', ACCENT,
+                          lambda: self._rtl_double_tap(sid, popup)))
+        box.add_widget(mk('⑦ 清除任务', GRAY,
+                          lambda: self._clear_double_tap(sid, popup)))
         popup.content = box
         Clock.schedule_once(lambda *a: popup.open(), 0.05)
-        self._append_log('地图双击：%s号机 任务菜单（%.5f, %.5f）' % (sid, lat, lng))
+        self._append_log('地图双击：%s号机 #%s 功能菜单 (%.5f, %.5f)' % (sid, seq, lat, lng))
+
+    def _nearest_wp_seq_at(self, lat, lng, v):
+        """双击点附近(屏幕~28px≈标记/几米)是否有已有航点；有则返回其 seq"""
+        if not v or not v.mission:
+            return None
+        mp = getattr(self, '_map_page', None)
+        g = getattr(mp, '_grid', None)
+        pc = getattr(mp, '_px_center', None)
+        if g is None or not pc:
+            return None
+        z = mp._zoom
+        cx_px, cy_px = pc
+        gx, gy = g.center_x, g.center_y
+        try:
+            llat_gcj, llng_gcj = mapview.wgs84_to_gcj02(lat, lng)
+            dpx = mapview._lng_to_px(llng_gcj, z)
+            dpy = mapview._lat_to_px(llat_gcj, z)
+            dsx = gx + (dpx - cx_px)
+            dsy = gy - (dpy - cy_px)
+        except Exception:
+            return None
+        best_d = 1e18
+        best = None
+        for i, it in enumerate(v.mission):
+            ilat = it.get('lat')
+            ilon = it.get('lon')
+            if not ilat or not ilon or abs(ilat) < 1 or abs(ilon) < 1:
+                continue
+            try:
+                ilat_gcj, ilng_gcj = mapview.wgs84_to_gcj02(ilat, ilon)
+                px = mapview._lng_to_px(ilng_gcj, z)
+                py = mapview._lat_to_px(ilat_gcj, z)
+                sx = gx + (px - cx_px)
+                sy = gy - (py - cy_px)
+                d = ((sx - dsx) ** 2 + (sy - dsy) ** 2) ** 0.5
+                if d < best_d:
+                    best_d = d
+                    best = i
+            except Exception:
+                pass
+        return best if best_d <= 28 else None
+
+    def _menu_alt(self, sid, seq, popup):
+        popup.dismiss()
+        self._input_dialog('设航点高度（%s号机 #%s）' % (sid, seq), '高度(m)',
+                           lambda val: self._set_wp_alt(sid, seq, val))
+
+    def _menu_hold(self, sid, seq, popup):
+        popup.dismiss()
+        self._input_dialog('悬停时间（%s号机 #%s）' % (sid, seq), '悬停(秒)',
+                           lambda val: self._set_wp_hold(sid, seq, val))
+
+    def _menu_kind(self, sid, seq, popup, kind):
+        popup.dismiss()
+        v = self.fleet.vehicle(sid)
+        if v and v.mission and seq < len(v.mission):
+            if v.mission[seq].get('kind') == kind:
+                v.mission[seq].pop('kind', None)     # 再点一次取消
+            else:
+                v.mission[seq]['kind'] = kind
+            self._refresh_mission_table()
+            self._append_log('%s号机 #%s 设为%s' % (sid, seq, '集合点' if kind == 'collect' else '离散点'))
+
+    def _set_wp_alt(self, sid, seq, val):
+        try:
+            altv = float(val)
+        except Exception:
+            self._append_log('高度值无效：%s' % val)
+            return
+        v = self.fleet.vehicle(sid)
+        if v and v.mission and seq < len(v.mission):
+            v.mission[seq]['alt'] = altv
+            self._refresh_mission_table()
+            self._append_log('%s号机 #%s 高度=%sm' % (sid, seq, altv))
+
+    def _set_wp_hold(self, sid, seq, val):
+        try:
+            sec = float(val)
+        except Exception:
+            self._append_log('悬停值无效：%s' % val)
+            return
+        v = self.fleet.vehicle(sid)
+        if v and v.mission and seq < len(v.mission):
+            v.mission[seq]['p1'] = sec
+            self._refresh_mission_table()
+            self._append_log('%s号机 #%s 悬停=%ss' % (sid, seq, sec))
+
+    def _input_dialog(self, title, label, on_ok):
+        popup = Popup(title=title, size_hint=(0.82, 0.42), auto_dismiss=True)
+        box = BoxLayout(orientation='vertical', spacing=10, padding=14)
+        box.add_widget(Label(text=label, halign='center', font_size='15sp'))
+        tin = CompactTextInput(hint_text=label, input_filter='float', font_size='18sp')
+        box.add_widget(tin)
+        row = BoxLayout(size_hint_y=None, height='46dp', spacing=10)
+        row.add_widget(self._mk_btn('确定', ACCENT, lambda: (popup.dismiss(), on_ok(tin.text)),
+                                    size_hint_y=None, height='46dp'))
+        row.add_widget(self._mk_btn('取消', GRAY, lambda: popup.dismiss(),
+                                    size_hint_y=None, height='46dp'))
+        box.add_widget(row)
+        popup.content = box
+        Clock.schedule_once(lambda *a: popup.open(), 0.05)
 
     def _bomb_double_tap(self, sid, popup):
         popup.dismiss()
@@ -1148,6 +1336,7 @@ class SwarmMobileApp(App):
         self._lbl_lock.color = DANGER if armed else (0.55, 0.8, 0.6, 1)
         self._refresh_satellites()
         self._refresh_single_state()
+        self._refresh_map_aircraft()
         if self.fleet.connected and self._btn_conn.text != '断开':
             self._btn_conn.text = '断开'
 
@@ -1155,24 +1344,32 @@ class SwarmMobileApp(App):
         Clock.schedule_once(lambda _dt: self._refresh_satellites_impl(), 0)
 
     def _refresh_satellites_impl(self):
+        """卫星行：10 机两行（5+5），每格上位机号+颗数、下位该机飞行模式"""
         sysids = sorted(self.fleet.fleet)
         if len(self._sat_box.children) != len(sysids):
             self._sat_box.clear_widgets()
             for s in sysids:
-                blk = BoxLayout(orientation='horizontal', spacing=1)
+                blk = BoxLayout(orientation='vertical', spacing=0)
+                top = BoxLayout(orientation='horizontal', spacing=1)
                 lbl_id = Label(text='', font_size='13sp', bold=True)
                 lbl_n = Label(text='', font_size='13sp')
+                lbl_mode = Label(text='', font_size='12sp')
                 blk.lbl_id = lbl_id
                 blk.lbl_n = lbl_n
-                blk.add_widget(lbl_id)
-                blk.add_widget(lbl_n)
+                blk.lbl_mode = lbl_mode
+                top.add_widget(lbl_id)
+                top.add_widget(lbl_n)
+                blk.add_widget(top)
+                blk.add_widget(lbl_mode)
                 self._sat_box.add_widget(blk)
         for blk, s in zip(reversed(self._sat_box.children), sysids):
             v = self.fleet.fleet[s]
             lbl_id = blk.lbl_id
             lbl_n = blk.lbl_n
+            lbl_mode = blk.lbl_mode
             lbl_id.text = str(s)
             lbl_n.text = '--'
+            lbl_mode.text = '--'
             if v.online and v.satellites is not None:
                 lbl_id.color = DANGER      # 机号：红（在线）
                 lbl_n.text = str(v.satellites)
@@ -1180,6 +1377,11 @@ class SwarmMobileApp(App):
             else:
                 lbl_id.color = GRAY
                 lbl_n.color = GRAY
+            if v.online and v.mode is not None:
+                lbl_mode.text = v.mode_zh
+                lbl_mode.color = OK
+            else:
+                lbl_mode.color = GRAY
 
     def _refresh_single_state(self):
         Clock.schedule_once(lambda _dt: self._refresh_single_state_impl(), 0)

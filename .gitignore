@@ -8,3 +8,9 @@ logs/
 *.log
 # Python 缓存
 *.py[cod]
+# 本地诊断/辅助/产物
+_diag_*.py
+_diag_*.png
+_run_app.py
+preview_*.png
+*.apk

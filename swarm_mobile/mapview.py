@@ -10,11 +10,14 @@ import math
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.widget import Widget
 from kivy.uix.image import AsyncImage
 from kivy.uix.label import Label
-from kivy.graphics import Color, Rectangle
+from kivy.graphics import Color, Rectangle, Line, Ellipse
 from kivy.core.text import LabelBase
+from kivy.core.text import Label as CoreLabel
 from math import hypot
 
 from .widgets import RoundedButton
@@ -134,7 +137,7 @@ class TileCell(AsyncImage):
         self.source = self._tile_url(s)
 
     def _on_tile_error(self, *a):
-        # 换下一个子域重试（4 子域循环最多 8 次），避免单子域故障整图空白
+        # 加载失败重试几次（ESRI 无子域，重试同一地址）
         self._retry += 1
         if self._retry < 8:
             s = _SUB[(self._tx * 7 + self._ty + self._retry) % 4]
@@ -149,6 +152,114 @@ class TileCell(AsyncImage):
 
 
 # ---------------- 卫星地图页 ----------------
+class _RouteLayer(Widget):
+    """地图覆盖层：航点圆点+连线 + 飞机位置标记（<8颗星灰，>=8颗星蓝）"""
+    def __init__(self, map_ref, **kw):
+        kw.setdefault('size_hint', (1, 1))
+        super(_RouteLayer, self).__init__(**kw)
+        self._map = map_ref
+        self._route = []
+        self._planes = []
+        self._aircraft_labels = {}
+        self.bind(size=lambda *a: self._redraw())
+        self.bind(pos=lambda *a: self._redraw())
+
+    def set_route(self, route):
+        self._route = list(route)
+        self._redraw()
+
+    def set_aircraft(self, planes):
+        """planes: [(sysid, lat, lon, satellites), ...]"""
+        self._planes = list(planes)
+        self._redraw()
+
+    def _redraw(self, *a):
+        self.canvas.clear()
+        m = self._map
+        pc = getattr(m, '_px_center', None)
+        if m._grid is None or not pc:
+            return
+        z = m._zoom
+        cx_px, cy_px = pc
+        g = m._grid
+        gx, gy = g.center_x, g.center_y
+        # 画航线（航点圆点 + 黄色连线）
+        pts = []
+        for (lat, lon) in self._route:
+            try:
+                lat_gcj, lng_gcj = wgs84_to_gcj02(lat, lon)
+                px_x = _lng_to_px(lng_gcj, z)
+                px_y = _lat_to_px(lat_gcj, z)
+                sx = gx + (px_x - cx_px)
+                sy = gy - (px_y - cy_px)
+                pts.append((sx, sy))
+            except Exception:
+                pass
+        with self.canvas:
+            if pts:
+                Color(1, 0.75, 0.1, 1)
+                Line(points=[c for p in pts for c in p], width=2)
+                for (sx, sy) in pts:
+                    Color(0.1, 0.7, 1, 1)
+                    Ellipse(pos=(sx - 6, sy - 6), size=(12, 12))
+            # 飞机位置标记（圆点 + 机号）
+            W = getattr(m, 'width', 0)
+            H = getattr(m, 'height', 0)
+            for (sysid, lat, lon, satellites) in self._planes:
+                try:
+                    lat_gcj, lng_gcj = wgs84_to_gcj02(lat, lon)
+                    px_x = _lng_to_px(lng_gcj, z)
+                    px_y = _lat_to_px(lat_gcj, z)
+                    sx = gx + (px_x - cx_px)
+                    sy = gy - (px_y - cy_px)
+                    if -20 <= sx <= W + 20 and -20 <= sy <= H + 20:
+                        if satellites is not None and satellites >= 8:
+                            Color(0.1, 0.6, 1, 1)
+                        else:
+                            Color(0.55, 0.55, 0.55, 1)
+                        Ellipse(pos=(sx - 9, sy - 9), size=(18, 18))
+                except Exception:
+                    pass
+        self._sync_aircraft_labels()
+
+    def _sync_aircraft_labels(self):
+        """用 Label 控件在飞机点旁显示机号"""
+        m = self._map
+        pc = getattr(m, '_px_center', None)
+        for k in list(self._aircraft_labels.keys()):
+            try:
+                self.remove_widget(self._aircraft_labels[k])
+            except Exception:
+                pass
+        self._aircraft_labels = {}
+        if not self._planes or m._grid is None or not pc:
+            return
+        z = m._zoom
+        cx_px, cy_px = pc
+        gx, gy = m._grid.center_x, m._grid.center_y
+        for (sysid, lat, lon, satellites) in self._planes:
+            try:
+                lat_gcj, lng_gcj = wgs84_to_gcj02(lat, lon)
+                px_x = _lng_to_px(lng_gcj, z)
+                px_y = _lat_to_px(lat_gcj, z)
+                sx = gx + (px_x - cx_px)
+                sy = gy - (px_y - cy_px)
+                col = (0.1, 0.6, 1, 1) if (satellites is not None and satellites >= 8) else (0.55, 0.55, 0.55, 1)
+                lbl = Label(text=str(sysid), font_size='16sp', bold=True,
+                            color=(1, 0.18, 0.18, 1), size_hint=(None, None),
+                            size=(30, 26), halign='center', valign='middle')
+                # 背景色圈
+                from kivy.graphics import Color, Ellipse
+                with lbl.canvas.before:
+                    Color(0, 0, 0, 0.55)
+                    Ellipse(pos=(0, 0), size=(26, 26))
+                lbl.pos = (sx + 12, sy - 13)
+                self.add_widget(lbl)
+                self._aircraft_labels[sysid] = lbl
+            except Exception:
+                pass
+
+
 class MapPage(BoxLayout):
     """卫星地图：3x3 瓦片铺满（横竖屏自适应）+ 双指捏合缩放 + 关闭按钮。
 
@@ -170,31 +281,19 @@ class MapPage(BoxLayout):
         self._embedded = embedded
         self._last_tap_t = 0
         self._grid = None
+        # 航点长按拖动状态
+        self._drag_points = []
+        self._drag_idx = None
+        self._drag_touch_id = None
+        self._long_press_uid = None
+        self._down_pos = None
+        self._drag_cb = None
+        self._pending_pick = None    # (lat,lng) 待加点（双击则取消）
+        self._pick_uid = None        # 延迟加点的 Clock id
         self._cells = []
         self._touches = {}             # touch.id -> touch（用于双指捏合）
         self._pinch_start_dist = None
-
-        # 顶栏：坐标显示 + 缩放提示 + 关闭按钮（embedded 内嵌版无关闭）
-        top = BoxLayout(orientation='horizontal', size_hint_y=None, height='42dp',
-                        spacing=6, padding=(8, 0))
-        self._lbl_lat = RoundedButton(text='N:%.5f' % center[0], size_hint_x=0.33,
-                                      font_size='15sp', radius='6dp',
-                                      background_color=(0.2, 0.35, 0.55, 0.55),
-                                      border_width='1dp')
-        self._lbl_lng = RoundedButton(text='E:%.5f' % center[1], size_hint_x=0.33,
-                                      font_size='15sp', radius='6dp',
-                                      background_color=(0.2, 0.45, 0.3, 0.55),
-                                      border_width='1dp')
-        self._lbl_alt = RoundedButton(text='H:%d' % self._zoom, size_hint_x=0.33,
-                                      font_size='15sp', radius='6dp',
-                                      background_color=(0.5, 0.32, 0.18, 0.55),
-                                      border_width='1dp')
-        top.add_widget(self._lbl_lat)
-        top.add_widget(self._lbl_lng)
-        top.add_widget(self._lbl_alt)
-        self.add_widget(top)
-
-
+        self._px_center = None
         self.bind(size=self._on_resize)
         self._rebuild()
 
@@ -211,12 +310,11 @@ class MapPage(BoxLayout):
         if self._on_close:
             self._on_close()
 
+
     def _rebuild(self, *a):
         """按中心+缩放重建 3x3 瓦片网格"""
         if self.width < 100 or self.height < 100:
             return
-        if hasattr(self, '_lbl_zoom'):
-            self._lbl_alt.text = 'H:%d' % self._zoom
         self._center = tuple(self._center)
         lat, lng = wgs84_to_gcj02(self._center[0], self._center[1])
         z = self._zoom
@@ -253,21 +351,8 @@ class MapPage(BoxLayout):
         # 双指手势过程中不触发取点
         if len(self._touches) >= 2:
             return
-        z = self._zoom
-        cx_px, cy_px = self._px_center
-        w = cell.width
-        idx = self._grid.children.index(cell)
-        row = idx // 3
-        col_i = idx % 3
-        px_x = cx_px - (1 - col_i) * w + (pos[0] - cell.x)
-        px_y = cy_px + (1 - row) * w - (pos[1] - cell.y)
-        lng_gcj = _px_to_lng(px_x, z)
-        lat_gcj = _px_to_lat(px_y, z)
-        lat, lng = gcj02_to_wgs84(lat_gcj, lng_gcj)
-        self._lbl_lat.text = 'N:%.5f' % lat
-        self._lbl_lng.text = 'E:%.5f' % lng
-        if self._on_pick:
-            self._on_pick(lat, lng)
+        lat, lng = self._tap_lat_lng(pos)
+        self._pending_pick = (lat, lng)   # 存待定点，touch_up 延迟加点
 
     def _tap_lat_lng(self, pos):
         """地图内任意屏幕坐标 → WGS84 经纬（双击任务菜单用）"""
@@ -287,6 +372,8 @@ class MapPage(BoxLayout):
         # 双击检测：0.35s 内再次点击 = 双击（弹任务菜单，类似电脑端右键）
         if self._last_tap_t and touch.time_start - self._last_tap_t < 0.35:
             self._last_tap_t = 0
+            self._cancel_pick_add()   # 双击：取消单击加点（只开菜单不加点）
+            self._pending_pick = None
             if len(self._touches) < 2 and self._on_double_tap:
                 lat, lng = self._tap_lat_lng(touch.pos)
                 self._on_double_tap(lat, lng)
@@ -298,32 +385,82 @@ class MapPage(BoxLayout):
         self._touches[touch.id] = touch
         if len(self._touches) == 2:
             self._pinch_start_dist = self._pinch_dist()
+        # 长按检测：单指按住 0.5s 不动 -> 拖动航点
+        self._down_pos = touch.pos
+        if len(self._touches) == 1 and not self._drag_idx:
+            self._cancel_long_press()
+            self._long_press_uid = Clock.schedule_once(
+                lambda dt: self._on_long_press(touch), 0.5)
         return handled or True
 
     def on_touch_move(self, touch):
         if touch.id in self._touches:
             self._touches[touch.id] = touch
+        # 拖动航点
+        if self._drag_idx is not None and self._drag_touch_id == touch.id:
+            lat, lng = self._tap_lat_lng(touch.pos)
+            self._fire_drag('move', self._drag_idx, lat, lng)
+            return True
         if len(self._touches) >= 2:
             d = self._pinch_dist()
             if self._pinch_start_dist and self._pinch_start_dist > 0:
                 ratio = d / self._pinch_start_dist
-                if ratio > 1.15 and self._zoom < 18:
+                if ratio > 1.05 and self._zoom < 18:
                     self._zoom += 1
                     self._pinch_start_dist = d
                     self._rebuild()
-                elif ratio < 0.85 and self._zoom > 3:
+                elif ratio < 0.95 and self._zoom > 3:
                     self._zoom -= 1
                     self._pinch_start_dist = d
                     self._rebuild()
         return super(MapPage, self).on_touch_move(touch)
 
+    def on_scroll_start(self, touch, check=True):
+        """鼠标滚轮缩放（电脑/桌面可用）"""
+        try:
+            if getattr(touch, 'is_mouse_scrolling', False):
+                dy = getattr(touch, 'scroll_y', 0)
+                if dy and self.collide_point(*touch.pos):
+                    if dy > 0 and self._zoom < 18:
+                        self._zoom += 1
+                        self._rebuild()
+                    elif dy < 0 and self._zoom > 3:
+                        self._zoom -= 1
+                        self._rebuild()
+                    return True
+        except Exception:
+            pass
+        return super(MapPage, self).on_scroll_start(touch, check=check)
+
     def on_touch_up(self, touch):
+        # 结束拖动航点
+        if self._drag_idx is not None and self._drag_touch_id == touch.id:
+            lat, lng = self._tap_lat_lng(touch.pos)
+            self._fire_drag('end', self._drag_idx, lat, lng)
+            self._drag_idx = None
+            self._drag_touch_id = None
+            self._cancel_long_press()
+            if touch.id in self._touches:
+                del self._touches[touch.id]
+            try:
+                touch.ungrab(self)
+            except Exception:
+                pass
+            if len(self._touches) < 2:
+                self._pinch_start_dist = None
+            return True
+        self._cancel_long_press()
         if touch.id in self._touches:
             del self._touches[touch.id]
         try:
             touch.ungrab(self)
         except Exception:
             pass
+        # 单点抬起：延迟 0.3s 加点（给双击留窗口）；双击会在 on_touch_down 取消
+        if self._pending_pick and len(self._touches) == 0:
+            lat, lng = self._pending_pick
+            self._pending_pick = None
+            self._schedule_pick_add(lat, lng)
         if len(self._touches) < 2:
             self._pinch_start_dist = None
         return super(MapPage, self).on_touch_up(touch)
@@ -333,3 +470,80 @@ class MapPage(BoxLayout):
         if len(pts) < 2:
             return 0.0
         return hypot(pts[0][0] - pts[1][0], pts[0][1] - pts[1][1])
+
+    def set_draggable_points(self, points):
+        """可拖动航点：[(idx, lat, lon), ...]"""
+        self._drag_points = list(points)
+
+    def _cancel_long_press(self):
+        if self._long_press_uid:
+            try:
+                Clock.unschedule(self._long_press_uid)
+            except Exception:
+                pass
+        self._long_press_uid = None
+
+    def _schedule_pick_add(self, lat, lng):
+        self._cancel_pick_add()
+        self._pick_uid = Clock.schedule_once(
+            lambda dt: self._commit_pick(lat, lng), 0.3)
+
+    def _cancel_pick_add(self):
+        if self._pick_uid:
+            try:
+                Clock.unschedule(self._pick_uid)
+            except Exception:
+                pass
+        self._pick_uid = None
+
+    def _commit_pick(self, lat, lng):
+        self._pick_uid = None
+        if self._on_pick:
+            self._on_pick(lat, lng)
+
+    def _on_long_press(self, touch):
+        self._long_press_uid = None
+        self._pending_pick = None   # 长按不添加点（拖动）
+        # 用按下位置找最近航点（按住移动也锁定按下时那个点）
+        pos = self._down_pos or touch.pos
+        if len(self._touches) != 1 or not self._drag_points:
+            return
+        idx, lat, lon = self._nearest_drag_point(pos)
+        if idx is not None:
+            self._drag_idx = idx
+            self._drag_touch_id = touch.id
+            self._fire_drag('start', idx, lat, lon)
+
+    def _nearest_drag_point(self, pos):
+        z = self._zoom
+        pc = getattr(self, '_px_center', None)
+        g = self._grid
+        if g is None or not pc or not self._drag_points:
+            return None, None, None
+        cx_px, cy_px = pc
+        gx, gy = g.center_x, g.center_y
+        best_d = 1e9
+        best = None
+        for (idx, lat, lon) in self._drag_points:
+            try:
+                lat_gcj, lng_gcj = wgs84_to_gcj02(lat, lon)
+                px_x = _lng_to_px(lng_gcj, z)
+                px_y = _lat_to_px(lat_gcj, z)
+                sx = gx + (px_x - cx_px)
+                sy = gy - (px_y - cy_px)
+                d = hypot(sx - pos[0], sy - pos[1])
+                if d < best_d:
+                    best_d = d
+                    best = (idx, lat, lon)
+            except Exception:
+                pass
+        if best and best_d <= 52:
+            return best
+        return None, None, None
+
+    def _fire_drag(self, ev, idx, lat, lon):
+        if self._drag_cb:
+            try:
+                self._drag_cb(ev, idx, lat, lon)
+            except Exception:
+                pass
