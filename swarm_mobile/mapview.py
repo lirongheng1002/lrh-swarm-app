@@ -13,9 +13,11 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.image import AsyncImage
 from kivy.uix.label import Label
-from kivy.uix.slider import Slider
 from kivy.graphics import Color, Rectangle
 from kivy.core.text import LabelBase
+from math import hypot
+
+from .widgets import RoundedButton
 
 # ---------------- 高德瓦片 ----------------
 _TILE_URL = 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}'
@@ -97,11 +99,13 @@ def _px_to_lat(y, z):
     return math.degrees(math.atan(math.sinh(math.pi * t)))
 
 
-# ---------------- 通用按钮（模块级，避免类内裸名 NameError 导致地图窗崩） ----------------
+# ---------------- 通用按钮 ----------------
 def _mk_button(text, color, cb, **kw):
-    from kivy.uix.button import Button
-    b = Button(text=text, background_color=color, size_hint_y=None,
-               height='44dp', font_size='15sp', **kw)
+    kw.setdefault('size_hint_y', None)
+    kw.setdefault('height', '44dp')
+    kw.setdefault('font_size', '15sp')
+    kw.setdefault('radius', '10dp')
+    b = RoundedButton(text=text, background_color=color, **kw)
     b.bind(on_release=lambda *a: cb())
     return b
 
@@ -146,7 +150,12 @@ class TileCell(AsyncImage):
 
 # ---------------- 卫星地图页 ----------------
 class MapPage(BoxLayout):
-    """卫星地图：3x3 瓦片铺满（横竖屏自适应）+ 缩放滑条 + 关闭按钮（embedded 内嵌版无关闭）"""
+    """卫星地图：3x3 瓦片铺满（横竖屏自适应）+ 双指捏合缩放 + 关闭按钮。
+
+    手势：
+    - 单指点击/抬起：取点回调 on_pick(lat, lng)
+    - 双指捏合/张开：缩放地图（zoom 3~18）
+    """
     def __init__(self, center=(31.2304, 121.4737), zoom=15, on_pick=None,
                  on_close=None, embedded=False, **kw):
         kw.setdefault('orientation', 'vertical')
@@ -154,44 +163,39 @@ class MapPage(BoxLayout):
         kw.setdefault('padding', 4)
         super(MapPage, self).__init__(**kw)
         self._center = center          # (lat, lng) WGS84
-        self._zoom = zoom
+        self._zoom = max(3, min(18, int(zoom)))
         self._on_pick = on_pick
         self._on_close = on_close
         self._embedded = embedded
         self._grid = None
         self._cells = []
+        self._touches = {}             # touch.id -> touch（用于双指捏合）
+        self._pinch_start_dist = None
 
-        # 顶栏：坐标显示 + 缩放滑条（内嵌版无关闭按钮）
+        # 顶栏：坐标显示 + 缩放提示 + 关闭按钮（embedded 内嵌版无关闭）
         top = BoxLayout(orientation='horizontal', size_hint_y=None, height='42dp',
                         spacing=8, padding=(8, 4))
-        self._lbl_coord = Label(text='%.5f, %.5f' % center, size_hint_x=0.6,
+        self._lbl_coord = Label(text='%.5f, %.5f' % center, size_hint_x=0.55,
                                 font_size='15sp', halign='left')
-        self._slider = Slider(min=3, max=18, value=zoom, size_hint_x=0.4,
-                              step=1)
-        self._slider.bind(value=self._on_zoom)
+        self._lbl_zoom = Label(text='zoom %d' % self._zoom, size_hint_x=0.2,
+                               font_size='14sp', halign='center',
+                               color=(0.7, 0.85, 1, 1))
         top.add_widget(self._lbl_coord)
-        top.add_widget(self._slider)
+        top.add_widget(self._lbl_zoom)
         if not embedded:
             top.add_widget(_mk_button('关闭', (0.75, 0.28, 0.22, 1),
-                                      self._do_close, size_hint_x=0.18))
+                                      self._do_close, size_hint_x=0.25))
         else:
-            top.add_widget(Label(text='', size_hint_x=0.18))
+            top.add_widget(Label(text='', size_hint_x=0.25))
         self.add_widget(top)
 
-        self._hint = Label(text='点击地图任一点设为航点（卫星图，任意方向可用）',
+        self._hint = Label(text='双指捏合缩放，点击地图设为航点',
                            size_hint_y=None, height='26dp', font_size='12sp',
                            color=(0.9, 0.85, 0.6, 1))
         self.add_widget(self._hint)
 
         self.bind(size=self._on_resize)
         self._rebuild()
-
-    def _on_zoom(self, inst, val):
-        self._zoom = int(val)
-        try:
-            self._rebuild()
-        except Exception:
-            pass
 
     def _on_resize(self, *a):
         # Popup 打开瞬间尺寸可能为 0——此时重建瓦片会算错/卡死，跳过等首次有效尺寸
@@ -210,6 +214,8 @@ class MapPage(BoxLayout):
         """按中心+缩放重建 3x3 瓦片网格"""
         if self.width < 100 or self.height < 100:
             return
+        if hasattr(self, '_lbl_zoom'):
+            self._lbl_zoom.text = 'zoom %d' % self._zoom
         self._center = tuple(self._center)
         lat, lng = wgs84_to_gcj02(self._center[0], self._center[1])
         z = self._zoom
@@ -243,17 +249,12 @@ class MapPage(BoxLayout):
 
     def _on_cell_tap(self, cell, pos):
         """点击像素 -> 全球像素 -> GCJ02 -> WGS84 -> 回调"""
+        # 双指手势过程中不触发取点
+        if len(self._touches) >= 2:
+            return
         z = self._zoom
         cx_px, cy_px = self._px_center
-        # 该瓦片左上角在网格里的像素位置：中心瓦片在网格中央（行列 1,1）
-        tx = cell._tx
-        ty = cell._ty
-        # 网格总宽=3*cell.width（同一瓦片宽），定位该瓦片左下角坐标
         w = cell.width
-        gx0 = self._grid.x
-        gy0 = self._grid.top - self._grid.height     # 网格底
-        col = tx - (self._cells[4][1])   # 中心瓦片列 = 4 号 cell 的 tx
-        # 简化：按 cell 在 grid 中的位置（children index % 3）
         idx = self._grid.children.index(cell)
         row = idx // 3
         col_i = idx % 3
@@ -265,3 +266,49 @@ class MapPage(BoxLayout):
         self._lbl_coord.text = '%.5f, %.5f' % (lat, lng)
         if self._on_pick:
             self._on_pick(lat, lng)
+
+    # ---------------- 双指捏合缩放 ----------------
+    def on_touch_down(self, touch):
+        if not self.collide_point(*touch.pos):
+            return super(MapPage, self).on_touch_down(touch)
+        # 先让子控件处理（TileCell 取点），同时自己 grab 以便跟踪手势
+        handled = super(MapPage, self).on_touch_down(touch)
+        touch.grab(self)
+        self._touches[touch.id] = touch
+        if len(self._touches) == 2:
+            self._pinch_start_dist = self._pinch_dist()
+        return handled or True
+
+    def on_touch_move(self, touch):
+        if touch.id in self._touches:
+            self._touches[touch.id] = touch
+        if len(self._touches) >= 2:
+            d = self._pinch_dist()
+            if self._pinch_start_dist and self._pinch_start_dist > 0:
+                ratio = d / self._pinch_start_dist
+                if ratio > 1.15 and self._zoom < 18:
+                    self._zoom += 1
+                    self._pinch_start_dist = d
+                    self._rebuild()
+                elif ratio < 0.85 and self._zoom > 3:
+                    self._zoom -= 1
+                    self._pinch_start_dist = d
+                    self._rebuild()
+        return super(MapPage, self).on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if touch.id in self._touches:
+            del self._touches[touch.id]
+        try:
+            touch.ungrab(self)
+        except Exception:
+            pass
+        if len(self._touches) < 2:
+            self._pinch_start_dist = None
+        return super(MapPage, self).on_touch_up(touch)
+
+    def _pinch_dist(self):
+        pts = [(t.x, t.y) for t in self._touches.values()]
+        if len(pts) < 2:
+            return 0.0
+        return hypot(pts[0][0] - pts[1][0], pts[0][1] - pts[1][1])
