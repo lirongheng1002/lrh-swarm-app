@@ -764,20 +764,20 @@ class SwarmMobileApp(App):
     # ---------------- 四、任务航点 ----------------
     def _build_mission(self):
         """任务航线页控件区：输入框紧凑，按钮圆润，功能分区。"""
-        b = BoxLayout(orientation='vertical', spacing=2, size_hint_y=1)
+        b = GlassPanel(orientation='vertical', spacing=2, size_hint_y=1,
+                       padding=(8, 4), bg=(0.25, 0.45, 0.85, 0.16),
+                       border=(0.4, 0.65, 1, 0.6), radius='12dp')
         # 目标机行：航点/任务都发给这架（领导：加航点必须明确是几号机）
         rt = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
-        rt.add_widget(Label(text='目标机', font_size='14sp', size_hint_x=0.2,
-                            halign='center', valign='middle'))
         self._sp_tgt = Spinner(text='1号机', values=['%d号机' % i for i in range(1, 11)],
-                               font_size='15sp', size_hint_x=0.2)
+                               font_size='15sp', size_hint_x=0.25)
         rt.add_widget(self._sp_tgt)
         self._wp_lat = CompactTextInput(hint_text='纬度', input_filter='float',
-                                        size_hint_x=0.2, halign='center')
+                                        size_hint_x=0.25, halign='center')
         self._wp_lon = CompactTextInput(hint_text='经度', input_filter='float',
-                                        size_hint_x=0.2, halign='center')
+                                        size_hint_x=0.25, halign='center')
         self._wp_alt = CompactTextInput(hint_text='高度m', input_filter='float',
-                                        size_hint_x=0.2, halign='center')
+                                        size_hint_x=0.25, halign='center')
         rt.add_widget(self._wp_lat)
         rt.add_widget(self._wp_lon)
         rt.add_widget(self._wp_alt)
