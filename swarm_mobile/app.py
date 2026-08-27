@@ -766,43 +766,35 @@ class SwarmMobileApp(App):
         """任务航线页控件区：输入框紧凑，按钮圆润，功能分区。"""
         b = BoxLayout(orientation='vertical', spacing=2, size_hint_y=1)
         # 目标机行：航点/任务都发给这架（领导：加航点必须明确是几号机）
-        rt = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='36dp')
+        rt = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
         rt.add_widget(Label(text='目标机', font_size='14sp', size_hint_x=0.2,
-                            halign='right', valign='middle'))
+                            halign='center', valign='middle'))
         self._sp_tgt = Spinner(text='1号机', values=['%d号机' % i for i in range(1, 11)],
-                               font_size='15sp', size_hint_x=0.28)
+                               font_size='15sp', size_hint_x=0.2)
         rt.add_widget(self._sp_tgt)
-        rt.add_widget(Label(text='航点/任务发给这架，地图双击弹任务菜单', font_size='13sp',
-                            color=(0.7, 0.75, 0.7, 1), size_hint_x=0.52))
-        b.add_widget(rt)
-        # 第一行：经纬高输入 + 加航点 / 插投弹
-        r2 = BoxLayout(orientation='horizontal', spacing=5,
-                       size_hint_y=None, height='40dp')
         self._wp_lat = CompactTextInput(hint_text='纬度', input_filter='float',
-                                        size_hint_x=0.22, halign='center')
+                                        size_hint_x=0.2, halign='center')
         self._wp_lon = CompactTextInput(hint_text='经度', input_filter='float',
-                                        size_hint_x=0.22, halign='center')
+                                        size_hint_x=0.2, halign='center')
         self._wp_alt = CompactTextInput(hint_text='高度m', input_filter='float',
-                                        size_hint_x=0.16, halign='center')
-        r2.add_widget(self._wp_lat)
-        r2.add_widget(self._wp_lon)
-        r2.add_widget(self._wp_alt)
-        r2.add_widget(self._mk_btn('加航点', ACCENT, self._on_add_wp,
-                                   size_hint_x=0.2, font_size='15sp',
-                                   height='40dp'))
-        r2.add_widget(self._mk_btn('插投弹', DANGER, self._on_add_bomb,
-                                   size_hint_x=0.2, font_size='15sp',
-                                   height='40dp'))
-        b.add_widget(r2)
+                                        size_hint_x=0.2, halign='center')
+        rt.add_widget(self._wp_lat)
+        rt.add_widget(self._wp_lon)
+        rt.add_widget(self._wp_alt)
+        b.add_widget(rt)
 
-        # 第二行：全屏地图 + 坐标换算
-        r3 = BoxLayout(orientation='horizontal', spacing=5,
-                       size_hint_y=None, height='40dp')
+        # 功能按钮 4 等份：全屏地图/坐标换算/加航点/插投弹（加航点在全屏地图下方、插投弹在坐标换算下方）
+        r3 = GridLayout(cols=2, spacing=5, size_hint_y=None, height='85dp',
+                        padding=(0, 0))
         r3.add_widget(self._mk_btn('全屏地图', (0.15, 0.6, 0.35, 1),
-                                   self._on_open_map, size_hint_x=0.5,
-                                   font_size='15sp', height='40dp'))
+                                   self._on_open_map, font_size='15sp',
+                                   height='40dp'))
         r3.add_widget(self._mk_btn('坐标换算', (0.55, 0.4, 0.2, 1),
-                                   self._on_open_coord, size_hint_x=0.5,
+                                   self._on_open_coord, font_size='15sp',
+                                   height='40dp'))
+        r3.add_widget(self._mk_btn('加航点', ACCENT, self._on_add_wp,
+                                   font_size='15sp', height='40dp'))
+        r3.add_widget(self._mk_btn('插投弹', DANGER, self._on_add_bomb,
                                    font_size='15sp', height='40dp'))
         b.add_widget(r3)
 
