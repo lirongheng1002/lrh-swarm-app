@@ -381,7 +381,7 @@ class SwarmMobileApp(App):
         行3（起飞参数）：起飞高度 | 输入框 | 确定 | m
         行4（全队参数）：全队高度 | 输入框 | 确定 | m
         """
-        g = GridLayout(cols=4, spacing=6, size_hint_y=None, height='280dp',
+        g = GridLayout(cols=4, spacing=6, size_hint_y=None, height='160dp',
                        padding=(2, 2))
 
         # 行1：安全与起降
@@ -416,32 +416,40 @@ class SwarmMobileApp(App):
         g.add_widget(self._mk_btn('全部切模式', ACCENT, self._on_all_mode_btn,
                                   font_size='15sp'))
 
-        # 行3：全队高度（编队/返航目标高度；领导：单机高度/速度放②栏，①只留全队参数）
-        g.add_widget(Label(text='全队高度', font_size='14sp', halign='right',
-                           valign='middle', color=(0.85, 0.85, 0.85, 1)))
-        self._fm_alt = CompactTextInput(text='30', input_filter='float',
-                                        size_hint_x=1, size_hint_y=None,
-                                        height='40dp', halign='center')
-        g.add_widget(self._fm_alt)
-        g.add_widget(self._mk_btn('确定', OK, self._on_confirm_fm_alt,
-                                  font_size='14sp', height='40dp'))
-        g.add_widget(Label(text='m', font_size='14sp', halign='left',
-                           valign='middle', color=(0.7, 0.7, 0.7, 1)))
-        # 行4：全队速度（立即发送 DO_CHANGE_SPEED）
-        g.add_widget(Label(text='全队速度', font_size='14sp', halign='right',
-                           valign='middle', color=(0.85, 0.85, 0.85, 1)))
-        self._spd_all = CompactTextInput(text='10', input_filter='float',
-                                         size_hint_x=1, size_hint_y=None,
-                                         height='40dp', halign='center')
-        g.add_widget(self._spd_all)
-        g.add_widget(self._mk_btn('发送', OK, self._on_confirm_speed_all,
-                                  font_size='14sp', height='40dp'))
-        g.add_widget(Label(text='m/s', font_size='14sp', halign='left',
-                           valign='middle', color=(0.7, 0.7, 0.7, 1)))
+        # 行3/行4（全队高度/全队速度）拆出网格成独立整行——见下方 wrap 内重建
+        # （领导：输入框横向拉长铺满左右、无留白；间距收紧向上贴顶）
 
-        wrap = BoxLayout(orientation='vertical', spacing=8,
-                         size_hint_y=None, height='280dp')
+        wrap = BoxLayout(orientation='vertical', spacing=4,
+                         size_hint_y=None, height='248dp')
         wrap.add_widget(g)
+        # 行3：全队高度——独立整行，输入框横拉铺满（领导：无留白、与按钮同高40dp）
+        r3 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
+        r3.add_widget(Label(text='全队高度', font_size='14sp', size_hint_x=0.14,
+                            halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
+        self._fm_alt = CompactTextInput(text='30', input_filter='float',
+                                        size_hint_x=0.52, size_hint_y=None,
+                                        height='40dp', halign='center')
+        r3.add_widget(self._fm_alt)
+        r3.add_widget(self._mk_btn('确定', OK, self._on_confirm_fm_alt,
+                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
+        r3.add_widget(Label(text='m', font_size='14sp', size_hint_x=0.08,
+                            halign='left', valign='middle', color=(0.7, 0.7, 0.7, 1)))
+        r3.add_widget(Label(text='', size_hint_x=0.06))
+        wrap.add_widget(r3)
+        # 行4：全队速度——独立整行
+        r4 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
+        r4.add_widget(Label(text='全队速度', font_size='14sp', size_hint_x=0.14,
+                            halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
+        self._spd_all = CompactTextInput(text='10', input_filter='float',
+                                         size_hint_x=0.52, size_hint_y=None,
+                                         height='40dp', halign='center')
+        r4.add_widget(self._spd_all)
+        r4.add_widget(self._mk_btn('发送', OK, self._on_confirm_speed_all,
+                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
+        r4.add_widget(Label(text='m/s', font_size='14sp', size_hint_x=0.08,
+                            halign='left', valign='middle', color=(0.7, 0.7, 0.7, 1)))
+        r4.add_widget(Label(text='', size_hint_x=0.06))
+        wrap.add_widget(r4)
         return wrap
 
     def _on_confirm_tof_alt(self, _x):
@@ -476,8 +484,8 @@ class SwarmMobileApp(App):
 
     # ---------------- 二、队形编队 ----------------
     def _build_formation(self):
-        b = BoxLayout(orientation='vertical', spacing=4,
-                      size_hint_y=None, height='188dp')
+        b = BoxLayout(orientation='vertical', spacing=8,
+                      size_hint_y=None, height='202dp')
         # 领导要求：队形区不再重复全队高度（①网格已有，编队/返航都读①的 _fm_alt）
         r2 = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
         r2.add_widget(Label(text='前后/左右/小组m', font_size='13sp', size_hint_x=0.3,
@@ -496,7 +504,7 @@ class SwarmMobileApp(App):
                                    size_hint_x=0.38, font_size='15sp'))
         r3.add_widget(Label(text='', size_hint_x=0.24))
         b.add_widget(r3)
-        pg = GridLayout(cols=3, spacing=6, size_hint_y=None, height='92dp')
+        pg = GridLayout(cols=3, spacing=6, size_hint_y=None, height='96dp')
         for name in ['一字横排', '人字形', '前三角', '后三角', '梯形', '三角群']:
             pg.add_widget(self._mk_btn(name, (0.3, 0.3, 0.35, 1),
                                        lambda n=name: self._on_preset(n),

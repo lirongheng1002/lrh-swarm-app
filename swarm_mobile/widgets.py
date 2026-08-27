@@ -11,7 +11,7 @@ class RoundedButton(Button):
     """圆角按钮：background_color 即填充色，支持圆角半径与描边。"""
 
     radius = NumericProperty('8dp')
-    border_color = ListProperty([1, 1, 1, 0.25])
+    border_color = ListProperty([0, 0, 0, 0])
     border_width = NumericProperty('1dp')
 
     def __init__(self, **kwargs):
@@ -57,6 +57,8 @@ class CompactTextInput(TextInput):
         kwargs.setdefault('multiline', False)
         kwargs.setdefault('halign', 'center')
         kwargs.setdefault('padding_y', (dp(6), dp(6)))
+        kwargs.setdefault('background_normal', '')
+        kwargs.setdefault('background_active', '')
         kwargs.setdefault('background_color', [0.18, 0.2, 0.22, 1])
         kwargs.setdefault('foreground_color', [0.95, 0.95, 0.95, 1])
         kwargs.setdefault('hint_text_color', [0.55, 0.55, 0.55, 1])
