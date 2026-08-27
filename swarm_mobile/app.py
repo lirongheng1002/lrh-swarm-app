@@ -798,14 +798,6 @@ class SwarmMobileApp(App):
                                    font_size='15sp', height='40dp'))
         b.add_widget(r3)
 
-        # 任务表（紧凑，点选行）
-        self._mission_scroll = ScrollView(size_hint_y=None, height='4dp')
-        self._mission_box = BoxLayout(orientation='vertical', spacing=2,
-                                      size_hint_y=None)
-        self._mission_box.bind(minimum_height=self._mission_box.setter('height'))
-        self._mission_scroll.add_widget(self._mission_box)
-        b.add_widget(self._mission_scroll)
-
         # 最底行：下载任务 / 上传任务 / 读取航线 / 读取航点 / 清除任务
         r1 = BoxLayout(orientation='horizontal', spacing=5,
                        size_hint_y=None, height='40dp')
@@ -821,6 +813,14 @@ class SwarmMobileApp(App):
         r1.add_widget(self._mk_btn('清除任务', GRAY, self._on_clear_mission,
                                    size_hint_x=0.2, font_size='13sp', height='40dp'))
         b.add_widget(r1)
+
+        # 任务表（移到最底，不打断中部三处均匀间距）
+        self._mission_scroll = ScrollView(size_hint_y=None, height='4dp')
+        self._mission_box = BoxLayout(orientation='vertical', spacing=2,
+                                      size_hint_y=None)
+        self._mission_box.bind(minimum_height=self._mission_box.setter('height'))
+        self._mission_scroll.add_widget(self._mission_box)
+        b.add_widget(self._mission_scroll)
         return b
 
     def _mission_len(self):
