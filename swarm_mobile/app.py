@@ -497,9 +497,25 @@ class SwarmMobileApp(App):
         b = BoxLayout(orientation='vertical', spacing=6,
                       size_hint_y=None, height='210dp')
         # 全队高度复用全部飞机区已创建的输入框
+        # 队形区的全队高度：不能直接复用①网格里的 self._fm_alt（Kivy 一个控件只能
+        # 有一个父，复用会启动即崩 WidgetException）——新建同值输入框并与①双向联动
+        self._fm_alt_fm = CompactTextInput(text=self._fm_alt.text,
+                                           input_filter='float',
+                                           size_hint_x=1, halign='center')
+        def _link_fm(*_x):
+            a, b = self._fm_alt, self._fm_alt_fm
+            try:
+                if a.focus and b.text != a.text:
+                    b.text = a.text
+                elif b.focus and a.text != b.text:
+                    a.text = b.text
+            except Exception:
+                pass
+        self._fm_alt.bind(text=_link_fm)
+        self._fm_alt_fm.bind(text=_link_fm)
         b.add_widget(self._mk_hbox([
             Label(text='全队高度m', font_size='14sp', size_hint_x=0.24),
-            self._fm_alt,
+            self._fm_alt_fm,
             self._mk_btn('开始编队', OK, self._on_formation_start,
                          size_hint_x=0.22, font_size='15sp'),
             self._mk_btn('暂停编队', DANGER, self._on_formation_stop,
