@@ -157,7 +157,7 @@ class MapPage(BoxLayout):
     - 双指捏合/张开：缩放地图（zoom 3~18）
     """
     def __init__(self, center=(31.2304, 121.4737), zoom=15, on_pick=None,
-                 on_close=None, embedded=False, **kw):
+                 on_close=None, embedded=False, on_double_tap=None, **kw):
         kw.setdefault('orientation', 'vertical')
         kw.setdefault('spacing', 4)
         kw.setdefault('padding', 4)
@@ -166,7 +166,9 @@ class MapPage(BoxLayout):
         self._zoom = max(3, min(18, int(zoom)))
         self._on_pick = on_pick
         self._on_close = on_close
+        self._on_double_tap = on_double_tap
         self._embedded = embedded
+        self._last_tap_t = 0
         self._grid = None
         self._cells = []
         self._touches = {}             # touch.id -> touch（用于双指捏合）
@@ -267,10 +269,29 @@ class MapPage(BoxLayout):
         if self._on_pick:
             self._on_pick(lat, lng)
 
+    def _tap_lat_lng(self, pos):
+        """地图内任意屏幕坐标 → WGS84 经纬（双击任务菜单用）"""
+        z = self._zoom
+        cx_px, cy_px = self._px_center
+        g = self._grid
+        gx = g.center_x if g else self.center_x
+        gy = g.center_y if g else self.center_y
+        px_x = cx_px + (pos[0] - gx)
+        px_y = cy_px - (pos[1] - gy)
+        return gcj02_to_wgs84(_px_to_lat(px_y, z), _px_to_lng(px_x, z))
+
     # ---------------- 双指捏合缩放 ----------------
     def on_touch_down(self, touch):
         if not self.collide_point(*touch.pos):
             return super(MapPage, self).on_touch_down(touch)
+        # 双击检测：0.35s 内再次点击 = 双击（弹任务菜单，类似电脑端右键）
+        if self._last_tap_t and touch.time_start - self._last_tap_t < 0.35:
+            self._last_tap_t = 0
+            if len(self._touches) < 2 and self._on_double_tap:
+                lat, lng = self._tap_lat_lng(touch.pos)
+                self._on_double_tap(lat, lng)
+            return True
+        self._last_tap_t = touch.time_start
         # 先让子控件处理（TileCell 取点），同时自己 grab 以便跟踪手势
         handled = super(MapPage, self).on_touch_down(touch)
         touch.grab(self)

@@ -156,6 +156,17 @@ class FleetApp:
                     pass
         return n
 
+    def set_speed(self, sysid, mps):
+        """单机设巡航速度（DO_CHANGE_SPEED 178）"""
+        v = self.fleet.get(sysid)
+        if not v or not getattr(v, 'online', False) or not v.link:
+            return 0
+        try:
+            commands.change_speed(v.link, sysid, mps)
+        except Exception:
+            return 0
+        return 1
+
     def arm(self, sysid, on=True, force=False):
         return self._send(sysid, lambda b, s: commands.arm(b, s, on, force))
 
