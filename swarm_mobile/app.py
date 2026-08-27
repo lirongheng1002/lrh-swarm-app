@@ -189,6 +189,8 @@ class SwarmMobileApp(App):
 
     def build(self):
         Window.softinput_mode = 'below_target'
+        # 统一深色底：按钮圆角外/输入框周边不再是透明区外露（领导：消除透明框）
+        Window.clearcolor = (0.08, 0.1, 0.12, 1)
         self._sel_seq = None          # 任务表选中 seq
         self._sel_sys = 1             # 单机区选中机
         self._fm_st = '编队:关'
@@ -418,7 +420,8 @@ class SwarmMobileApp(App):
         g.add_widget(Label(text='全队高度', font_size='14sp', halign='right',
                            valign='middle', color=(0.85, 0.85, 0.85, 1)))
         self._fm_alt = CompactTextInput(text='30', input_filter='float',
-                                        size_hint_x=1, halign='center')
+                                        size_hint_x=1, size_hint_y=None,
+                                        height='40dp', halign='center')
         g.add_widget(self._fm_alt)
         g.add_widget(self._mk_btn('确定', OK, self._on_confirm_fm_alt,
                                   font_size='14sp', height='40dp'))
@@ -428,7 +431,8 @@ class SwarmMobileApp(App):
         g.add_widget(Label(text='全队速度', font_size='14sp', halign='right',
                            valign='middle', color=(0.85, 0.85, 0.85, 1)))
         self._spd_all = CompactTextInput(text='10', input_filter='float',
-                                         size_hint_x=1, halign='center')
+                                         size_hint_x=1, size_hint_y=None,
+                                         height='40dp', halign='center')
         g.add_widget(self._spd_all)
         g.add_widget(self._mk_btn('发送', OK, self._on_confirm_speed_all,
                                   font_size='14sp', height='40dp'))
@@ -473,47 +477,24 @@ class SwarmMobileApp(App):
     # ---------------- 二、队形编队 ----------------
     def _build_formation(self):
         b = BoxLayout(orientation='vertical', spacing=4,
-                      size_hint_y=None, height='232dp')
-        # 全队高度复用全部飞机区已创建的输入框
-        # 队形区的全队高度：不能直接复用①网格里的 self._fm_alt（Kivy 一个控件只能
-        # 有一个父，复用会启动即崩 WidgetException）——新建同值输入框并与①双向联动
-        self._fm_alt_fm = CompactTextInput(text=self._fm_alt.text,
-                                           input_filter='float',
-                                           size_hint_x=1, halign='center')
-        def _link_fm(*_x):
-            a, b = self._fm_alt, self._fm_alt_fm
-            try:
-                if a.focus and b.text != a.text:
-                    b.text = a.text
-                elif b.focus and a.text != b.text:
-                    a.text = b.text
-            except Exception:
-                pass
-        self._fm_alt.bind(text=_link_fm)
-        self._fm_alt_fm.bind(text=_link_fm)
-        r1 = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
-        r1.add_widget(Label(text='全队高度m', font_size='14sp', size_hint_x=0.26,
-                            halign='right', valign='middle'))
-        r1.add_widget(self._fm_alt_fm)
-        r1.add_widget(self._mk_btn('确定', OK, self._on_confirm_fm_alt,
-                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
-        r1.add_widget(Label(text='', size_hint_x=0.34))
-        b.add_widget(r1)
+                      size_hint_y=None, height='188dp')
+        # 领导要求：队形区不再重复全队高度（①网格已有，编队/返航都读①的 _fm_alt）
         r2 = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
-        r2.add_widget(Label(text='前后/左右/小组m', font_size='13sp', size_hint_x=0.34,
-                            halign='right', valign='middle'))
+        r2.add_widget(Label(text='前后/左右/小组m', font_size='13sp', size_hint_x=0.3,
+                            halign='left', valign='middle'))
         r2.add_widget(CompactTextInput(text=str(self.cfg['formation'].get('spacing_f', 5)),
-                                       input_filter='float', size_hint_x=0.14))
+                                       input_filter='float', size_hint_x=0.16))
         r2.add_widget(CompactTextInput(text=str(self.cfg['formation'].get('spacing_l', 5)),
-                                       input_filter='float', size_hint_x=0.14))
+                                       input_filter='float', size_hint_x=0.16))
         r2.add_widget(CompactTextInput(text=str(self.cfg['formation'].get('spacing_g', 10)),
-                                       input_filter='float', size_hint_x=0.14))
+                                       input_filter='float', size_hint_x=0.16))
         b.add_widget(r2)
-        r3 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='48dp')
+        r3 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='42dp')
         r3.add_widget(self._mk_btn('开始编队', OK, self._on_formation_start,
-                                   size_hint_x=0.5, font_size='17sp'))
+                                   size_hint_x=0.38, font_size='15sp'))
         r3.add_widget(self._mk_btn('暂停编队', DANGER, self._on_formation_stop,
-                                   size_hint_x=0.5, font_size='17sp'))
+                                   size_hint_x=0.38, font_size='15sp'))
+        r3.add_widget(Label(text='', size_hint_x=0.24))
         b.add_widget(r3)
         pg = GridLayout(cols=3, spacing=6, size_hint_y=None, height='92dp')
         for name in ['一字横排', '人字形', '前三角', '后三角', '梯形', '三角群']:

@@ -21,6 +21,8 @@ class RoundedButton(Button):
         kwargs.setdefault('background_disabled_normal', '')
         kwargs.setdefault('background_disabled_down', '')
         kwargs.setdefault('border', (0, 0, 0, 0))
+        # 默认不透明深灰底：按钮四角圆角外不露透明识别区（领导要求消除透明框）
+        kwargs.setdefault('background_color', (0.3, 0.32, 0.36, 1))
         super().__init__(**kwargs)
         self._bg = None
         self._border = None
