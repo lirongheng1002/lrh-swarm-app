@@ -764,8 +764,8 @@ class SwarmMobileApp(App):
     # ---------------- 四、任务航点 ----------------
     def _build_mission(self):
         """任务航线页控件区：输入框紧凑，按钮圆润，功能分区。"""
-        b = GlassPanel(orientation='vertical', spacing=2, size_hint_y=1,
-                       padding=(8, 4), bg=(0.25, 0.45, 0.85, 0.16),
+        b = GlassPanel(orientation='vertical', spacing=4, size_hint_y=None,
+                       height='180dp', padding=(8, 2), bg=(0.25, 0.45, 0.85, 0.16),
                        border=(0.4, 0.65, 1, 0.6), radius='12dp')
         # 目标机行：航点/任务都发给这架（领导：加航点必须明确是几号机）
         rt = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
@@ -784,7 +784,7 @@ class SwarmMobileApp(App):
         b.add_widget(rt)
 
         # 功能按钮 4 等份：全屏地图/坐标换算/加航点/插投弹（加航点在全屏地图下方、插投弹在坐标换算下方）
-        r3 = GridLayout(cols=2, spacing=5, size_hint_y=None, height='85dp',
+        r3 = GridLayout(cols=2, spacing=4, size_hint_y=None, height='84dp',
                         padding=(0, 0))
         r3.add_widget(self._mk_btn('全屏地图', (0.15, 0.6, 0.35, 1),
                                    self._on_open_map, font_size='15sp',
