@@ -297,13 +297,12 @@ class SwarmMobileApp(App):
 
         # ---- 页① 全部飞机：全队操作 + 队形编队（领导要求飞行拆分：全部/单架）----
         sv0 = ScrollView()
-        body0 = BoxLayout(orientation='vertical', spacing=8, padding=(4, 20),
+        body0 = BoxLayout(orientation='vertical', spacing=4, padding=(4, 20),
                           size_hint_y=None)
         body0.bind(minimum_height=body0.setter('height'))
         body0.add_widget(self._section_title('一、全队操作', (0.18, 0.4, 0.72, 1)))
         body0.add_widget(self._build_fleet_ops())
         body0.add_widget(self._section_title('二、队形编队', (0.18, 0.4, 0.72, 1)))
-        body0.add_widget(BoxLayout(size_hint_y=None, height='2dp'))
         body0.add_widget(self._build_formation())
         sv0.add_widget(body0)
 
