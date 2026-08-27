@@ -644,43 +644,43 @@ class SwarmMobileApp(App):
         b.add_widget(gwrap)
         # 本机高度/本机速度——蓝色圆角毛玻璃框（同①页全队行）+ m/m/s 灰色小毛玻璃框
         bpar = GlassPanel(orientation='vertical', spacing=6, padding=(10, 4),
-                          size_hint_y=None, height='96dp',
+                          size_hint_y=None, height='104dp',
                           bg=(0.25, 0.45, 0.85, 0.16), border=(0.4, 0.65, 1, 0.6),
                           radius='12dp')
         rh = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
-        rh.add_widget(Label(text='本机高度', font_size='14sp', size_hint_x=0.22,
+        rh.add_widget(Label(text='本机高度', font_size='14sp', size_hint_x=0.14,
                             halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
-        self._alt_one = CompactTextInput(text='30', input_filter='float',
-                                         size_hint_x=0.4, size_hint_y=None,
+        self._alt_one = CompactTextInput(text='30', input_filter='float', font_size='18sp',
+                                         size_hint_x=0.52, size_hint_y=None,
                                          height='40dp', halign='center')
         rh.add_widget(self._alt_one)
         gm2 = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
-                         height='30dp', padding=(2, 0), spacing=0,
+                         height='40dp', padding=(2, 0), spacing=0,
                          bg=(0.6, 0.62, 0.66, 0.16), border=(0.6, 0.62, 0.66, 0.5),
                          radius='8dp', border_width='1dp')
         gm2.add_widget(Label(text='m', font_size='14sp', halign='center',
                              valign='middle', color=(0.75, 0.75, 0.75, 1)))
         rh.add_widget(gm2)
         rh.add_widget(self._mk_btn('确认', OK, self._on_confirm_alt_one,
-                                   size_hint_x=0.24, font_size='14sp', height='40dp'))
+                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
         rh.add_widget(Label(text='', size_hint_x=0.06))
         bpar.add_widget(rh)
         rs = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
-        rs.add_widget(Label(text='本机速度', font_size='14sp', size_hint_x=0.22,
+        rs.add_widget(Label(text='本机速度', font_size='14sp', size_hint_x=0.14,
                             halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
-        self._spd_one = CompactTextInput(text='5', input_filter='float',
-                                         size_hint_x=0.4, size_hint_y=None,
+        self._spd_one = CompactTextInput(text='5', input_filter='float', font_size='18sp',
+                                         size_hint_x=0.52, size_hint_y=None,
                                          height='40dp', halign='center')
         rs.add_widget(self._spd_one)
         gms2 = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
-                          height='30dp', padding=(2, 0), spacing=0,
+                          height='40dp', padding=(2, 0), spacing=0,
                           bg=(0.6, 0.62, 0.66, 0.16), border=(0.6, 0.62, 0.66, 0.5),
                           radius='8dp', border_width='1dp')
         gms2.add_widget(Label(text='m/s', font_size='12sp', halign='center',
                               valign='middle', color=(0.75, 0.75, 0.75, 1)))
         rs.add_widget(gms2)
         rs.add_widget(self._mk_btn('确认', OK, self._on_confirm_speed_one,
-                                   size_hint_x=0.24, font_size='14sp', height='40dp'))
+                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
         rs.add_widget(Label(text='', size_hint_x=0.06))
         bpar.add_widget(rs)
         b.add_widget(BoxLayout(size_hint_y=None, height='4dp'))
