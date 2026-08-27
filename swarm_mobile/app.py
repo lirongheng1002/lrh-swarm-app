@@ -436,7 +436,7 @@ class SwarmMobileApp(App):
         r3 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
         r3.add_widget(Label(text='全队高度', font_size='14sp', size_hint_x=0.14,
                             halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
-        self._fm_alt = CompactTextInput(text='30', input_filter='float',
+        self._fm_alt = CompactTextInput(text='30', input_filter='float', font_size='18sp',
                                         size_hint_x=0.52, size_hint_y=None,
                                         height='40dp', halign='center')
         r3.add_widget(self._fm_alt)
@@ -456,7 +456,7 @@ class SwarmMobileApp(App):
         r4 = BoxLayout(orientation='horizontal', spacing=8, size_hint_y=None, height='40dp')
         r4.add_widget(Label(text='全队速度', font_size='14sp', size_hint_x=0.14,
                             halign='left', valign='middle', color=(0.85, 0.85, 0.85, 1)))
-        self._spd_all = CompactTextInput(text='10', input_filter='float',
+        self._spd_all = CompactTextInput(text='10', input_filter='float', font_size='18sp',
                                          size_hint_x=0.52, size_hint_y=None,
                                          height='40dp', halign='center')
         r4.add_widget(self._spd_all)
@@ -526,11 +526,11 @@ class SwarmMobileApp(App):
         r2.add_widget(Label(text='前后/左右/小组m', font_size='13sp', size_hint_x=0.24,
                             halign='left', valign='middle'))
         r2.add_widget(CompactTextInput(text=str(self.cfg['formation'].get('spacing_f', 5)),
-                                       input_filter='float', size_hint_x=0.2))
+                                       input_filter='float', font_size='18sp', size_hint_x=0.2))
         r2.add_widget(CompactTextInput(text=str(self.cfg['formation'].get('spacing_l', 5)),
-                                       input_filter='float', size_hint_x=0.2))
+                                       input_filter='float', font_size='18sp', size_hint_x=0.2))
         r2.add_widget(CompactTextInput(text=str(self.cfg['formation'].get('spacing_g', 10)),
-                                       input_filter='float', size_hint_x=0.2))
+                                       input_filter='float', font_size='18sp', size_hint_x=0.2))
         gr2.add_widget(r2)
         b.add_widget(gr2)
         r3 = BoxLayout(orientation='horizontal', spacing=0, size_hint_y=None, height='48dp')
