@@ -369,8 +369,10 @@ class SwarmMobileApp(App):
         self._lbl_log.text = ''
 
     def _section_title(self, text, color):
-        return Label(text=text, font_size='18sp', bold=True, color=color,
-                     size_hint_y=None, height='32dp', halign='left', valign='middle')
+        lbl = Label(text=text, font_size='18sp', bold=True, color=color,
+                    size_hint_y=None, height='32dp', halign='center', valign='middle')
+        lbl.bind(width=lambda w, v: setattr(w, 'text_size', (v, None)))
+        return lbl
 
     def _h_cell(self, btn):
         return btn
