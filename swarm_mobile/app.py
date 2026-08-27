@@ -319,9 +319,15 @@ class SwarmMobileApp(App):
                                          zoom=14, embedded=True,
                                          on_pick=self._on_map_pick_embed,
                                          on_double_tap=self._on_map_double_tap)
-        self._map_page.size_hint_y = 0.52
+        self._map_page.size_hint_y = 0.38
         body2.add_widget(self._map_page)
-        bottom = BoxLayout(orientation='vertical', spacing=1, size_hint_y=0.48)
+        # 任务表显示在地图下方（读取航线信息：序号/指令/位置/高度m/悬停s）
+        self._mission_scroll = ScrollView(size_hint_y=None, height='96dp')
+        self._mission_box = BoxLayout(orientation='vertical', spacing=2, size_hint_y=None)
+        self._mission_box.bind(minimum_height=self._mission_box.setter('height'))
+        self._mission_scroll.add_widget(self._mission_box)
+        body2.add_widget(self._mission_scroll)
+        bottom = BoxLayout(orientation='vertical', spacing=1, size_hint_y=0.40)
         bottom.add_widget(self._build_mission())
         body2.add_widget(bottom)
 
@@ -765,7 +771,7 @@ class SwarmMobileApp(App):
     def _build_mission(self):
         """任务航线页控件区：输入框紧凑，按钮圆润，功能分区。"""
         b = GlassPanel(orientation='vertical', spacing=4, size_hint_y=None,
-                       height='190dp', padding=(8, 2), bg=(0.25, 0.45, 0.85, 0.16),
+                       height='182dp', padding=(8, 2), bg=(0.25, 0.45, 0.85, 0.16),
                        border=(0.4, 0.65, 1, 0.6), radius='12dp')
         # 目标机行：航点/任务都发给这架（领导：加航点必须明确是几号机）
         rt = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='50dp')
@@ -826,13 +832,6 @@ class SwarmMobileApp(App):
                                    size_hint_x=0.2, font_size='13sp', height='40dp'))
         b.add_widget(r1)
 
-        # 任务表（移到最底，不打断中部三处均匀间距）
-        self._mission_scroll = ScrollView(size_hint_y=None, height='4dp')
-        self._mission_box = BoxLayout(orientation='vertical', spacing=2,
-                                      size_hint_y=None)
-        self._mission_box.bind(minimum_height=self._mission_box.setter('height'))
-        self._mission_scroll.add_widget(self._mission_box)
-        b.add_widget(self._mission_scroll)
         return b
 
     def _mission_len(self):
@@ -848,12 +847,25 @@ class SwarmMobileApp(App):
         rows = v.mission if v else []
         self._mission_box.clear_widgets()
         sel = self._sel_seq
+        # 表头：序号 / 指令 / 位置 / 高度m / 悬停s
+        hd = GridLayout(cols=5, spacing=2, size_hint_y=None, height='26dp')
+        for h in ('序号', '指令', '位置', '高度m', '悬停s'):
+            hd.add_widget(Label(text=h, font_size='13sp', bold=True,
+                                halign='center', valign='middle'))
+        self._mission_box.add_widget(hd)
         for it in rows:
             cmd = vehicles.MAV_CMD_ZH.get(it['cmd'], 'M%g' % it['cmd'])
-            pos = '' if it['cmd'] == 184 else ' %.6f,%.6f %sm' % (it['lat'], it['lon'], it['alt'])
-            txt = '#%d %s%s' % (it['seq'], cmd, pos)
+            if it['cmd'] == 184:
+                pos = '--'
+                alt = '--'
+                hover = '%.0f' % it.get('param1', 0)
+            else:
+                pos = '%.6f,%.6f' % (it['lat'], it['lon'])
+                alt = '%.1f' % it['alt'] if it['alt'] else '--'
+                hover = '--'
+            txt = '#%d  %s  %s  %sm  %ss' % (it['seq'], cmd, pos, alt, hover)
             row = RoundedButton(
-                text=txt, font_size='14sp', height='34dp', size_hint_y=None,
+                text=txt, font_size='13sp', height='34dp', size_hint_y=None,
                 background_color=(0.35, 0.5, 0.35, 1) if sel == it['seq'] else
                                  (0.25, 0.3, 0.38, 1),
                 radius='6dp')
