@@ -440,8 +440,6 @@ class SwarmMobileApp(App):
                                         size_hint_x=0.52, size_hint_y=None,
                                         height='40dp', halign='center')
         r3.add_widget(self._fm_alt)
-        r3.add_widget(self._mk_btn('确定', OK, self._on_confirm_fm_alt,
-                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
         # 单位 m：灰色毛玻璃小框（领导：单位用灰框）
         gm = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
                         height='30dp', padding=(2, 0), spacing=0,
@@ -450,6 +448,8 @@ class SwarmMobileApp(App):
         gm.add_widget(Label(text='m', font_size='14sp', halign='center',
                             valign='middle', color=(0.75, 0.75, 0.75, 1)))
         r3.add_widget(gm)
+        r3.add_widget(self._mk_btn('确定', OK, self._on_confirm_fm_alt,
+                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
         r3.add_widget(Label(text='', size_hint_x=0.06))
         bfm.add_widget(r3)
         # 行4：全队速度——独立整行
@@ -460,8 +460,6 @@ class SwarmMobileApp(App):
                                          size_hint_x=0.52, size_hint_y=None,
                                          height='40dp', halign='center')
         r4.add_widget(self._spd_all)
-        r4.add_widget(self._mk_btn('发送', OK, self._on_confirm_speed_all,
-                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
         # 单位 m/s：灰色毛玻璃小框
         gms = GlassPanel(orientation='horizontal', size_hint_x=0.08, size_hint_y=None,
                          height='30dp', padding=(2, 0), spacing=0,
@@ -470,6 +468,8 @@ class SwarmMobileApp(App):
         gms.add_widget(Label(text='m/s', font_size='13sp', halign='center',
                              valign='middle', color=(0.75, 0.75, 0.75, 1)))
         r4.add_widget(gms)
+        r4.add_widget(self._mk_btn('发送', OK, self._on_confirm_speed_all,
+                                   size_hint_x=0.2, font_size='14sp', height='40dp'))
         r4.add_widget(Label(text='', size_hint_x=0.06))
         bfm.add_widget(r4)
         wrap.add_widget(bfm)
