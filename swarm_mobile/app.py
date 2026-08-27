@@ -319,9 +319,9 @@ class SwarmMobileApp(App):
                                          zoom=14, embedded=True,
                                          on_pick=self._on_map_pick_embed,
                                          on_double_tap=self._on_map_double_tap)
-        self._map_page.size_hint_y = 0.68
+        self._map_page.size_hint_y = 0.52
         body2.add_widget(self._map_page)
-        bottom = BoxLayout(orientation='vertical', spacing=1, size_hint_y=0.32)
+        bottom = BoxLayout(orientation='vertical', spacing=1, size_hint_y=0.48)
         bottom.add_widget(self._build_mission())
         body2.add_widget(bottom)
 
@@ -807,7 +807,7 @@ class SwarmMobileApp(App):
         b.add_widget(r3)
 
         # 任务表（紧凑，点选行）
-        self._mission_scroll = ScrollView(size_hint_y=None, height='70dp')
+        self._mission_scroll = ScrollView(size_hint_y=None, height='4dp')
         self._mission_box = BoxLayout(orientation='vertical', spacing=2,
                                       size_hint_y=None)
         self._mission_box.bind(minimum_height=self._mission_box.setter('height'))
