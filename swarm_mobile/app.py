@@ -585,6 +585,15 @@ class SwarmMobileApp(App):
 
         # 底部固定：本机切模式（醒目蓝色大按钮，始终可点）
         b.add_widget(BoxLayout(size_hint_y=0.06))
+        # 模式开关组：本机全部切模式控件统一归置（切自动/悬停/接自动 一行平铺，始终可点）
+        r4 = BoxLayout(orientation='horizontal', spacing=6, size_hint_y=None, height='40dp')
+        r4.add_widget(self._mk_btn('切自动', ACCENT, self._on_single_auto,
+                                   size_hint_x=0.34, font_size='14sp', height='40dp'))
+        r4.add_widget(self._mk_btn('悬停', ACCENT, self._on_single_loiter,
+                                   size_hint_x=0.33, font_size='14sp', height='40dp'))
+        r4.add_widget(self._mk_btn('接自动', ACCENT, self._on_single_join_auto,
+                                   size_hint_x=0.33, font_size='14sp', height='40dp'))
+        b.add_widget(r4)
         b.add_widget(self._mk_btn('本机切模式', ACCENT, self._on_single_mode_btn,
                                   size_hint_x=1.0, height='54dp', radius='12dp',
                                   font_size='18sp'))
@@ -617,6 +626,15 @@ class SwarmMobileApp(App):
         # 延迟一帧打开，避免安卓 Popup 首次尺寸为 0 导致内容错位
         Clock.schedule_once(lambda *a: popup.open(), 0.05)
         return popup
+
+    def _on_single_auto(self, _x):
+        self._single_act('切自动', self.fleet.set_mode, 3)
+
+    def _on_single_loiter(self, _x):
+        self._single_act('悬停', self.fleet.set_mode, 5)
+
+    def _on_single_join_auto(self, _x):
+        self._single_act('接自动', self.fleet.set_mode, 3)
 
     def _on_single_mode_btn(self, _x):
         self._mode_popup(

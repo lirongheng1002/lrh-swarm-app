@@ -8,7 +8,7 @@ source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,atlas,yaml,txt,md,ttf,otf,ttc
 source.include_patterns =
 
-version = 1.0.7
+version = 1.0.8
 
 # Python-for-android 依赖（pymavlink/pyyaml p4a 均有 recipe）
 requirements = python3,kivy,pymavlink,pyyaml
