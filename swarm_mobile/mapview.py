@@ -6,6 +6,8 @@
 - 缩放 Slider（3~18）；中心默认=首在线机坐标，否则 config map 中心或默认
 """
 import math
+import os
+import threading
 
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -25,6 +27,30 @@ from .widgets import RoundedButton
 # ---------------- 高德瓦片 ----------------
 _TILE_URL = 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}'
 _SUB = ['1', '2', '3', '4']
+_UA = 'Mozilla/5.0 (Linux; Android) LRH-swarm/1.2'
+
+# Tile disk cache: already-viewed tiles read from local disk instantly (same as desktop console)
+_TILE_CACHE_DIR = {'d': None}
+
+
+def _tile_cache_dir():
+    # prefer app user data dir (writable on phone); fall back beside the project
+    if _TILE_CACHE_DIR['d'] is None:
+        d = None
+        try:
+            from kivy.app import App
+            d = App.get_running_app().user_data_dir
+        except Exception:
+            d = None
+        if not d:
+            d = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tile_cache')
+        d = os.path.join(d, 'tile_cache')
+        try:
+            os.makedirs(d, exist_ok=True)
+        except Exception:
+            d = None
+        _TILE_CACHE_DIR['d'] = d
+    return _TILE_CACHE_DIR['d']
 
 # ---------------- GCJ-02 / WGS-84 ----------------
 def out_of_china(lng, lat):
@@ -115,7 +141,7 @@ def _mk_button(text, color, cb, **kw):
 
 # ---------------- 单瓦片 ----------------
 class TileCell(AsyncImage):
-    """一格瓦片：记录自身瓦片号，点击时回调外部；加载失败换子域自动重试"""
+    # 一格瓦片：本地磁盘缓存优先，未缓存后台下载落盘，失败换子域重试
     def __init__(self, tx=0, ty=0, z=15, on_tap=None, **kw):
         kw.setdefault('keep_ratio', False)
         kw.setdefault('allow_stretch', True)
@@ -127,6 +153,7 @@ class TileCell(AsyncImage):
         self._lbl = None
         self._retry = -1
         self._loaded = False
+        self._fetching = False
         self._refresh_source()
         self.bind(on_error=self._on_tile_error)
         self.bind(on_load=self._on_tile_loaded)
@@ -134,19 +161,66 @@ class TileCell(AsyncImage):
     def _tile_url(self, s):
         return _TILE_URL.format(s=s, x=self._tx, y=self._ty, z=self._z)
 
-    def _refresh_source(self):
-        s = _SUB[(self._tx * 7 + self._ty) % 4]
-        self.source = self._tile_url(s)
+    def _cache_path(self, s):
+        d = _tile_cache_dir()
+        if not d:
+            return None
+        return os.path.join(d, 't_%s_%d_%d_%d.jpg' % (s, self._tx, self._ty, self._z))
 
-    def _on_tile_error(self, *a):
-        # 加载失败重试几次（换子域；8 次耗尽后由地图页 3 秒定时器自动再请求）
+    def _refresh_source(self):
+        # cache hit -> local file (instant); miss -> background download then save to disk
+        if self._fetching:
+            return
+        s = _SUB[(self._tx * 7 + self._ty) % 4]
+        p = self._cache_path(s)
+        if p and os.path.exists(p):
+            self.source = p
+            return
+        self._start_download(s)
+
+    def _start_download(self, s):
+        self._fetching = True
+        def _dl():
+            import urllib.request
+            data = None
+            try:
+                req = urllib.request.Request(self._tile_url(s), headers={'User-Agent': _UA})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = resp.read()
+            except Exception:
+                data = None
+            Clock.schedule_once(lambda dt: self._on_downloaded(s, data))
+        threading.Thread(target=_dl, daemon=True).start()
+
+    def _on_downloaded(self, s, data):
+        self._fetching = False
+        try:
+            if data and len(data) > 200:
+                p = self._cache_path(s)
+                if p:
+                    try:
+                        with open(p, 'wb') as f:
+                            f.write(data)
+                    except Exception:
+                        pass
+                self.source = p if p else self._tile_url(s)
+            else:
+                self._on_download_failed()
+        except Exception:
+            self._on_download_failed()
+
+    def _on_download_failed(self):
         self._retry += 1
         if self._retry < 8:
             s = _SUB[(self._tx * 7 + self._ty + self._retry) % 4]
-            self.source = self._tile_url(s)
+            self._start_download(s)
+
+    def _on_tile_error(self, *a):
+        # local file rarely errors; fallback retry on any error
+        self._on_download_failed()
 
     def _on_tile_loaded(self, *a):
-        """瓦片加载成功：标记已加载、复位重试计数"""
+        # tile loaded ok: mark loaded and reset retry counter
         self._loaded = True
         self._retry = -1
 
@@ -282,6 +356,8 @@ class MapPage(BoxLayout):
         kw.setdefault('padding', 4)
         super(MapPage, self).__init__(**kw)
         self.gps_is_gcj = bool(gps_is_gcj)   # GPS 已是 GCJ 则不重复转换
+        self._calib = None   # 定位校准：[(GPS经, GPS纬, 地图经, 地图纬), ...] 两定点相似变换
+        self._calib_from = None   # 校准来源描述（如 '手动' ）
         self._to_disp = self._disp_or_gcj
         self._to_air = self._air_or_gcj
         self._center = center          # (lat, lng) WGS84
@@ -317,16 +393,94 @@ class MapPage(BoxLayout):
         Clock.schedule_interval(self._tile_recover, 3.0)
 
     def _disp_or_gcj(self, lat, lon):
-        """飞机坐标 -> 地图显示坐标(GCJ)；若 GPS 已是 GCJ 则原样"""
+        """飞机坐标 -> 地图显示坐标(GCJ)；若 GPS 已是 GCJ 则原样。
+        校准开启时，先经两定点相似变换再转 GCJ（标记与地图重叠）"""
+        if self._calib:
+            lat, lon = self._calib_fwd(lat, lon)
         if self.gps_is_gcj:
             return lat, lon
         return wgs84_to_gcj02(lat, lon)
 
     def _air_or_gcj(self, lat, lon):
-        """地图(GCJ)点 -> 原坐标(WGS)；若 GPS 已是 GCJ 则原样"""
+        """地图(GCJ)点 -> 原坐标(WGS)；若 GPS 已是 GCJ 则原样。
+        校准开启时，反向抵消相似变换（地图点 -> 应发 GPS）"""
         if self.gps_is_gcj:
             return lat, lon
-        return gcj02_to_wgs84(lat, lon)
+        lat, lon = gcj02_to_wgs84(lat, lon)
+        if self._calib:
+            return self._calib_inv(lat, lon)
+        return lat, lon
+
+    # ---------------- 定位校准（领导法：两定点相似变换） ----------------
+    def set_calib(self, pairs, note=''):
+        """两定点定位校准：pairs=[(GPS纬, GPS经, 地图纬, 地图经), ...]（>=2）。
+        不足2点或 None = 关闭。相似变换(平移+旋转+缩放)把「直角坐标换算出的经纬」
+        与地图点重叠；飞机标记、取点、平移、定位全部套用。"""
+        pairs = list(pairs or [])
+        if len(pairs) >= 2:
+            self._calib = pairs[:2]
+            self._calib_from = note
+        else:
+            self._calib = None
+            self._calib_from = ''
+
+    def clear_calib(self):
+        self._calib = None
+        self._calib_from = ''
+
+    @property
+    def calib_on(self):
+        return self._calib is not None
+
+    def _calib_len_ok(self):
+        return bool(self._calib) and len(self._calib) >= 2
+
+    def _calib_fwd(self, lat, lon):
+        """GPS经纬 -> 校准后地图显示经纬（局部米制相似变换）"""
+        if not self._calib_len_ok():
+            return lat, lon
+        p1, p2 = self._calib[0], self._calib[1]
+        lm = 111320.0
+        c1 = lm * math.cos(math.radians(p1[1]))   # 第1点GPS 经度方向 米/度
+        c2 = lm * math.cos(math.radians(p1[3]))   # 第1点地图 经度方向 米/度
+        g2e = (p2[1] - p1[1]) * c1
+        g2n = (p2[0] - p1[0]) * lm
+        d2e = (p2[3] - p1[3]) * c2
+        d2n = (p2[2] - p1[2]) * lm
+        den = g2e * g2e + g2n * g2n
+        if den < 1.0:
+            return lat, lon          # 两点太近：校准不可用，原样返回
+        ge = (lon - p1[1]) * c1
+        gn = (lat - p1[0]) * lm
+        k_re = (d2e * g2e + d2n * g2n) / den
+        k_im = (d2n * g2e - d2e * g2n) / den
+        de = k_re * ge - k_im * gn
+        dn = k_im * ge + k_re * gn
+        return p1[2] + dn / lm, p1[3] + de / c2
+
+    def _calib_inv(self, lat, lon):
+        """校准后地图显示经纬 -> GPS经纬（反向）"""
+        if not self._calib_len_ok():
+            return lat, lon
+        p1, p2 = self._calib[0], self._calib[1]
+        lm = 111320.0
+        c1 = lm * math.cos(math.radians(p1[1]))
+        c2 = lm * math.cos(math.radians(p1[3]))
+        g2e = (p2[1] - p1[1]) * c1
+        g2n = (p2[0] - p1[0]) * lm
+        d2e = (p2[3] - p1[3]) * c2
+        d2n = (p2[2] - p1[2]) * lm
+        den = d2e * d2e + d2n * d2n
+        if den < 1.0:
+            return lat, lon
+        de = (lon - p1[3]) * c2
+        dn = (lat - p1[2]) * lm
+        # z_g = z_d * z_g2 / z_d2  (除以 z_d2 = 乘共轭 / |z_d2|^2)
+        p_r = de * g2e - dn * g2n   # Re(z_d * z_g2)
+        p_i = de * g2n + dn * g2e   # Im(z_d * z_g2)
+        zg_re = (p_r * d2e + p_i * d2n) / den
+        zg_im = (p_i * d2e - p_r * d2n) / den
+        return p1[0] + zg_im / lm, p1[1] + zg_re / c1
 
     def _on_resize(self, *a):
         # Popup 打开瞬间尺寸可能为 0——此时重建瓦片会算错/卡死，跳过等首次有效尺寸

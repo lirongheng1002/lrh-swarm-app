@@ -121,6 +121,24 @@ class FleetApp:
                     vehicles.apply_packet(self.fleet, src, m)
         except Exception as e:
             self.last_err = str(e)
+        self._request_gps_streams()
+
+    def _request_gps_streams(self):
+        # 每架在线机请求 GPS_RAW_INT(24) @2Hz，卫星颗数才显示（同桌面控制台 ui.py:3605）。
+        # 只发一条、约40B/机，流量可忽略；离线后复位标记，重连自动补发（4G 抖动后自愈）。
+        if self.bus is None:
+            return
+        for s, v in self.fleet.items():
+            if not v.online:
+                v._gps_req = False
+                continue
+            if getattr(v, '_gps_req', False):
+                continue
+            try:
+                commands.set_message_interval(self.bus, s, 24, 500000)
+                v._gps_req = True
+            except Exception:
+                pass
 
     # ---------------- 指令（全队 / 单机） ----------------
     def _send(self, sysid, fn):

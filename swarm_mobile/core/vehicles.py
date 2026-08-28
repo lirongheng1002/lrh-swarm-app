@@ -46,6 +46,8 @@ class Vehicle:
         self.target = None                     # 最近一次编队目标 (lat, lon, alt, yaw)
         self.deviation = None                  # 实际位置与目标距离（米）
         self._throttled = False
+        self._gps_req = False   # 已请求 GPS_RAW_INT(24)@2Hz（卫星颗数）
+        self._gps_req = False   # 已请求 GPS_RAW_INT(24)@2Hz（卫星颗数）
         self.heartbeat_timeout = 5.0
 
     @property

@@ -327,6 +327,9 @@ class SwarmMobileApp(App):
                                          on_pick=self._on_map_pick_embed,
                                          on_double_tap=self._on_map_double_tap,
                                          gps_is_gcj=bool(self.cfg.get('map', {}).get('gps_is_gcj', False)))
+        _cal = (self.cfg.get('map', {}) or {}).get('calib') or {}
+        if _cal.get('on') and len(_cal.get('pts', [])) >= 2:
+            self._map_page.set_calib(_cal['pts'], note='开机自动应用')
         self._map_page.size_hint = (1, 1)
         map_holder.add_widget(self._map_page)
         self._map_route_layer = mapview._RouteLayer(self._map_page)
@@ -1166,6 +1169,8 @@ class SwarmMobileApp(App):
         box.add_widget(mk('⑦ 设为离散点（当前:%s）' % ktxt, ACCENT,
                           lambda: self._menu_kind(sid, seq, popup, 'disperse')))
         box.add_widget(mk('⑧ 清除任务', GRAY, lambda: self._clear_double_tap(sid, popup)))
+        box.add_widget(mk('⑨ 定位校准（两定点重叠，地图纠偏）', (0.7, 0.5, 0.95, 1),
+                          lambda: (popup.dismiss(), self._open_geo_calib())))
         sc.add_widget(box)
         popup.content = sc
         Clock.schedule_once(lambda *a: popup.open(), 0.05)
@@ -1426,6 +1431,163 @@ class SwarmMobileApp(App):
         self._map_page._zoom = max(self._map_page._zoom, 15)
         self._map_page._rebuild()
         self._append_log('坐标换算回填：北纬 %.6f 东经 %.6f —— 地图已定位到此点' % (lat, lon))
+
+    # ---------------- 定位校准（领导法：两定点重叠） ----------------
+    def _open_geo_calib(self, _x=None):
+        # 功能导航⑨：同一位置取两对坐标——①地图点一下得到的「地理坐标」
+        # ②您设备自定位的「直角坐标 X/Y」→ 相似变换，让地图标记与您的坐标重叠。
+        self._calib_ui = {'disp': [None, None], 'pairs': [None, None]}
+        popup = Popup(title='定位校准（两定点重叠）', size_hint=(0.95, 0.9), auto_dismiss=False)
+        body = BoxLayout(orientation='vertical', spacing=8, padding=12)
+        tip = Label(text='对同一位置：点「取点1」在地图上点一下 -> 记下识别坐标；\n再在下方填您设备的直角坐标 X/Y（米）并按「确认点1」。两点取完点「计算并启用」。',
+                    font_size='14sp', halign='left', valign='top', text_size=(440, None), color=(0.85, 0.9, 0.85, 1))
+        self._calib_status = Label(text='第1点：未取。第2点：未取。', font_size='16sp',
+                                   halign='left', valign='middle', color=(0.6, 0.9, 0.6, 1))
+        # 第1点
+        r1a = BoxLayout(orientation='horizontal', spacing=6)
+        b1_pick = RoundedButton(text='① 取点1（地图上点一下）', font_size='15sp',
+                                background_color=ACCENT, radius='10dp')
+        b1_ok = RoundedButton(text='确认点1', font_size='15sp', background_color=OK, radius='10dp')
+        r1a.add_widget(b1_pick)
+        r1a.add_widget(b1_ok)
+        x1 = CompactTextInput(hint_text='X1 北向坐标(米)')
+        y1 = CompactTextInput(hint_text='Y1 横坐标(可带带号)')
+        z1 = CompactTextInput(hint_text='带号(可空自动判)')
+        r1b = BoxLayout(orientation='horizontal', spacing=6)
+        for w in (x1, y1, z1):
+            w.size_hint_x = 1
+            r1b.add_widget(w)
+        # 第2点
+        r2a = BoxLayout(orientation='horizontal', spacing=6)
+        b2_pick = RoundedButton(text='② 取点2（地图上点一下）', font_size='15sp',
+                                background_color=ACCENT, radius='10dp')
+        b2_ok = RoundedButton(text='确认点2', font_size='15sp', background_color=OK, radius='10dp')
+        r2a.add_widget(b2_pick)
+        r2a.add_widget(b2_ok)
+        x2 = CompactTextInput(hint_text='X2 北向坐标(米)')
+        y2 = CompactTextInput(hint_text='Y2 横坐标(可带带号)')
+        z2 = CompactTextInput(hint_text='带号(可空自动判)')
+        r2b = BoxLayout(orientation='horizontal', spacing=6)
+        for w in (x2, y2, z2):
+            w.size_hint_x = 1
+            r2b.add_widget(w)
+        # 底部操作
+        r3 = BoxLayout(orientation='horizontal', spacing=6)
+        b_calc = RoundedButton(text='计算并启用', font_size='16sp', background_color=ACCENT, radius='10dp')
+        b_clr = RoundedButton(text='清除校准', font_size='14sp', background_color=(0.55, 0.4, 0.4, 1), radius='10dp')
+        b_close = RoundedButton(text='关闭', font_size='15sp', background_color=(0.5, 0.5, 0.5, 1), radius='10dp')
+        r3.add_widget(b_calc)
+        r3.add_widget(b_clr)
+        r3.add_widget(b_close)
+        b1_pick.bind(on_release=lambda _x: self._open_calib_map(0))
+        b1_ok.bind(on_release=lambda _x: self._calib_confirm(0, x1, y1, z1))
+        b2_pick.bind(on_release=lambda _x: self._open_calib_map(1))
+        b2_ok.bind(on_release=lambda _x: self._calib_confirm(1, x2, y2, z2))
+        b_calc.bind(on_release=lambda _x: self._calib_enable(popup))
+        b_clr.bind(on_release=lambda _x: self._calib_clear(popup))
+        b_close.bind(on_release=lambda _x: popup.dismiss())
+        for w in (tip, self._calib_status, r1a, r1b, r2a, r2b, r3):
+            body.add_widget(w)
+        popup.content = body
+        self._calib_popup = popup
+        Clock.schedule_once(lambda *a: popup.open(), 0.05)
+        self._append_log('定位校准：对同一位置取两定点（地图点1下+直角坐标X/Y），使标记与地图重叠')
+
+    def _open_calib_map(self, idx):
+        # 打开地图让领导点一下：识别出的坐标 = 该点的「地理坐标点」
+        mp = self._map_page
+        center = (mp._center if mp else (34.26, 108.94))
+        self._calib_map_popup = Popup(
+            title='取点%s —— 在地图上点一下实际位置' % ('1' if idx == 0 else '2'),
+            content=mapview.MapPage(center=center, zoom=15,
+                                    on_pick=lambda lat, lng: self._calib_pick(idx, lat, lng),
+                                    on_close=lambda: self._calib_map_popup.dismiss()),
+            size_hint=(0.98, 0.98))
+        self._calib_map_popup.open()
+
+    def _calib_pick(self, idx, lat, lng):
+        self._calib_ui['disp'][idx] = (lat, lng)
+        try:
+            self._calib_map_popup.dismiss()
+        except Exception:
+            pass
+        n = '1' if idx == 0 else '2'
+        self._calib_status.text = '第%s点 地图坐标已取：%.6f, %.6f —— 请填直角坐标X/Y并按确认' % (n, lat, lng)
+        self._append_log('校准点%s 地图识别坐标 %.6f, %.6f' % (n, lat, lng))
+
+    def _calib_confirm(self, idx, xi, yi, zi):
+        # 直角坐标X/Y（+带号）→ 经纬（CGCS2000 高斯六度带，同控制台）
+        try:
+            x = float(xi.text.strip())
+        except Exception:
+            self._calib_status.text = '第%s点 X 不是数字，请重填' % ('1' if idx == 0 else '2')
+            return
+        yraw = yi.text.strip()
+        if not yraw:
+            self._calib_status.text = '第%s点 Y 为空，请填写' % ('1' if idx == 0 else '2')
+            return
+        try:
+            zone = int(zi.text.strip()) if zi.text.strip() else None
+        except Exception:
+            zone = None
+        disp = self._calib_ui['disp'][idx]
+        if disp is None:
+            self._calib_status.text = '第%s点 还没取地图点，请先按「取点%d」' % ('1' if idx == 0 else '2', idx + 1)
+            return
+        try:
+            glat, glon = gauss.zone_to_latlon(x, yraw, zone)
+        except Exception as e:
+            self._calib_status.text = '直角坐标换算失败：%s' % e
+            return
+        # 配对：([GPS纬度, GPS经度] <- 识别的[地图纬度, 地图经度])
+        self._calib_ui['pairs'][idx] = (glat, glon, disp[0], disp[1])
+        n = '1' if idx == 0 else '2'
+        self._calib_status.text = '第%s点 已确认：直角→%.6f,%.6f / 地图 %.6f,%.6f' % (n, glat, glon, disp[0], disp[1])
+        self._append_log('校准点%s 直角坐标换算 %.6f,%.6f（地图点 %.6f,%.6f）' % (n, glat, glon, disp[0], disp[1]))
+
+    def _calib_enable(self, popup):
+        pairs = self._calib_ui['pairs']
+        if pairs[0] is None or pairs[1] is None:
+            self._calib_status.text = '两点未取齐：请先完成第1、2点的地图取点和确认'
+            return
+        (g1lat, g1lon, d1lat, d1lon), (g2lat, g2lon, d2lat, d2lon) = pairs
+        self._map_page.set_calib(pairs, note='手动')
+        self._map_page._rebuild()
+        # 持久化：下次开机自动应用
+        self.cfg.setdefault('map', {})['calib'] = {'on': True, 'pts': [list(p) for p in pairs]}
+        self._write_cfg()
+        # 汇报偏差规模（米）：识别坐标与直角换算坐标的差，便于领导核对
+        def _m(a, b):
+            lm = 111320.0
+            cm = lm * math.cos(math.radians(a[0]))
+            return ((b[0] - a[0]) * lm) ** 2 + ((b[1] - a[1]) * cm) ** 2
+        d_pt1 = _m((g1lat, g1lon), (d1lat, d1lon)) ** 0.5
+        d_pt2 = _m((g2lat, g2lon), (d2lat, d2lon)) ** 0.5
+        self._calib_status.text = '校准已启用（偏差点1≈%.0fm、点2≈%.0fm）。标记应与您的坐标重叠' % (d_pt1, d_pt2)
+        self._append_log('定位校准已启用：两定点相似变换（平移+旋转+缩放），%s' %
+                         ('偏差 点1≈%.0fm / 点2≈%.0fm' % (d_pt1, d_pt2)))
+        try:
+            popup.dismiss()
+        except Exception:
+            pass
+
+    def _calib_clear(self, popup):
+        self._map_page.clear_calib()
+        self._map_page._rebuild()
+        self.cfg.setdefault('map', {})['calib'] = {'on': False}
+        self._write_cfg()
+        self._calib_status.text = '校准已清除，恢复原始地图'
+        self._append_log('定位校准已清除')
+
+    def _write_cfg(self):
+        # 把 cfg 写回手机内 config.yaml（与连接保存同款）
+        try:
+            if self._config_path and os.path.exists(self._config_path):
+                import yaml
+                with open(self._config_path, 'w', encoding='utf-8') as f:
+                    yaml.safe_dump(self.cfg, f, allow_unicode=True, sort_keys=False)
+        except Exception as e:
+            self._append_log('  （配置保存失败：%s）' % e)
 
     # ---------------- 回调 ----------------
     def _sp_mode_all_mode(self):
