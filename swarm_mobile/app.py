@@ -751,8 +751,10 @@ class SwarmMobileApp(App):
                       padding=(8, 2))
         # 目标机行：航点/任务都发给这架（领导：加航点必须明确是几号机）
         rt = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
-        self._sp_tgt = Spinner(text='1号机', values=['%d号机' % i for i in range(1, 11)],
-                               font_size='15sp', size_hint_x=0.25, size_hint_y=None, height='40dp')
+        self._sp_tgt = RoundedButton(text='1号机', font_size='15sp', size_hint_x=0.25,
+                                      size_hint_y=None, height='40dp',
+                                      background_color=(0.18, 0.35, 0.55, 1),
+                                      on_release=lambda *a: self._pick_aircraft())
         rt.add_widget(self._sp_tgt)
         bx = BoxLayout(orientation='vertical', spacing=1, size_hint_x=0.25)
         self._wp_lat = CompactTextInput(hint_text='', input_filter='float',
@@ -788,7 +790,7 @@ class SwarmMobileApp(App):
                                    height='40dp'))
         r3.add_widget(self._mk_btn('添加航点', ACCENT, self._on_add_wp,
                                    font_size='14sp', height='40dp'))
-        r3.add_widget(self._mk_btn('添加投弹', DANGER, self._on_add_bomb,
+        r3.add_widget(self._mk_btn('功能导航', DANGER, self._open_function_nav,
                                    font_size='14sp', height='40dp'))
         b.add_widget(r3)
 
@@ -977,11 +979,9 @@ class SwarmMobileApp(App):
         self.fleet.upload_mission(self._mission_sysid())
 
     def _on_clear_mission(self, _x):
-        if not self.fleet.connected:
-            self._append_log('未连接')
-            return
-        self.fleet.clear_mission(self._mission_sysid())
-        self._refresh_mission_table()
+        sid = self._mission_sysid()
+        self._confirm('清除任务', '清除 %s号机 全部任务航点？（本地，上传才写飞机）' % sid,
+                      lambda: self._clear_mission_tgt(sid))
 
     def _mission_sysid(self):
         """③页目标机号（航点/任务操作对象，默认 1 号机）"""
@@ -989,6 +989,22 @@ class SwarmMobileApp(App):
             return int(self._sp_tgt.text.replace('号机', ''))
         except Exception:
             return 1
+
+    def _pick_aircraft(self):
+        """选目标机号：弹 1~10 号机按钮（手机端比 Spinner 下拉可靠）"""
+        popup = Popup(title='选择目标机', size_hint=(0.62, 0.66), auto_dismiss=True)
+        box = GridLayout(cols=2, spacing=8, padding=14)
+        for i in range(1, 11):
+            box.add_widget(self._mk_btn('%d号机' % i, ACCENT,
+                                         lambda i=i: self._set_tgt(i, popup),
+                                         size_hint_y=None, height='44dp', font_size='17sp'))
+        popup.content = box
+        Clock.schedule_once(lambda *a: popup.open(), 0.05)
+
+    def _set_tgt(self, i, popup):
+        popup.dismiss()
+        self._sp_tgt.text = '%d号机' % i
+        self._append_log('目标机：%s号机（添加航点/任务对象）' % i)
 
     def _on_add_wp(self, _x):
         try:
@@ -1010,6 +1026,39 @@ class SwarmMobileApp(App):
             return
         self.fleet.add_bomb_after(self._mission_sysid(), self._sel_seq)
         self._refresh_mission_table()
+
+    def _open_function_nav(self, _x=None):
+        """底部「功能导航」：一键弹出任务功能菜单（添加航点/投弹/高度/悬停/集合/离散/返航/清除/起飞）"""
+        sid = self._mission_sysid()
+        v = self.fleet.vehicle(sid)
+        seq = self._sel_seq
+        popup = Popup(title='功能导航 · %s号机' % sid, size_hint=(0.9, 0.85), auto_dismiss=True)
+        sc = ScrollView()
+        box = BoxLayout(orientation='vertical', spacing=6, padding=12, size_hint_y=None)
+        box.bind(minimum_height=box.setter('height'))
+        mk = lambda t, c, cb: self._mk_btn(t, c, cb, size_hint_y=None, height='46dp', font_size='15sp')
+        it = v.mission[seq] if (v and v.mission and seq is not None and seq < len(v.mission)) else {}
+        kind = it.get('kind')
+        ktxt = '集合点' if kind == 'collect' else ('离散点' if kind == 'disperse' else '普通')
+        bcfg = self.cfg.get('bomb', {})
+        box.add_widget(mk('① 起飞 Takeoff（%sm）' % self._tof_alt(), OK,
+                          lambda: self._takeoff_double_tap(sid, popup)))
+        box.add_widget(mk('② 添加航点（当前输入坐标）', ACCENT,
+                          lambda: (popup.dismiss(), self._on_add_wp(None))))
+        box.add_widget(mk('③ 返航 RTL', ACCENT, lambda: self._rtl_double_tap(sid, popup)))
+        box.add_widget(mk('④ 设航点高度（当前 %sm）' % it.get('alt', 0), ACCENT,
+                          lambda: self._menu_alt(sid, seq, popup)))
+        box.add_widget(mk('⑤ 投弹舵机设置（当前 %d 号舵机·PWM %s）' % (bcfg.get('servo', 6), bcfg.get('pwm', 2000)),
+                          DANGER, lambda: self._bomb_servo_set(sid, popup)))
+        box.add_widget(mk('⑥ 设为集合点（当前:%s）' % ktxt, ACCENT,
+                          lambda: self._menu_kind(sid, seq, popup, 'collect')))
+        box.add_widget(mk('⑦ 设为离散点（当前:%s）' % ktxt, ACCENT,
+                          lambda: self._menu_kind(sid, seq, popup, 'disperse')))
+        box.add_widget(mk('⑧ 清除任务', GRAY, lambda: self._clear_double_tap(sid, popup)))
+        sc.add_widget(box)
+        popup.content = sc
+        Clock.schedule_once(lambda *a: popup.open(), 0.05)
+        self._append_log('功能导航：%s号机' % sid)
 
     def _map_default_center(self):
         """地图默认中心：首选首架在线机坐标，否则默认市区"""
@@ -1036,47 +1085,8 @@ class SwarmMobileApp(App):
             sid, lat, lng, alt))
 
     def _on_map_double_tap(self, lat, lng):
-        """地图双击：航点功能菜单（设高度/悬停/集合/离散/投弹/返航/清除）"""
-        sid = self._mission_sysid()
-        v = self.fleet.vehicle(sid)
-        # 双击点附近(约5米/标记内)已有航点 → 直接对它开菜单（不加点不移点）
-        near = self._nearest_wp_seq_at(lat, lng, v)
-        seq = near if near is not None else self._sel_seq
-        if seq is None or not v or not v.mission or seq >= len(v.mission):
-            try:
-                alt = float(self._wp_alt.text) if self._wp_alt.text.strip() else 100.0
-            except Exception:
-                alt = 100.0
-            self.fleet.append_waypoint(sid, lat, lng, alt)
-            self._sel_seq = len(v.mission) - 1
-            self._refresh_mission_table()
-            seq = self._sel_seq
-        self._sel_seq = seq
-        it = v.mission[seq] if v and v.mission else {}
-        popup = Popup(title='功能菜单 · %s号机 #%s' % (sid, seq), size_hint=(0.9, 0.78),
-                      auto_dismiss=True)
-        box = BoxLayout(orientation='vertical', spacing=6, padding=12)
-        mk = lambda t, c, cb: self._mk_btn(t, c, cb, size_hint_y=None, height='44dp',
-                                           font_size='15sp')
-        box.add_widget(mk('① 设航点高度（当前 %sm）' % it.get('alt', 0), ACCENT,
-                          lambda: self._menu_alt(sid, seq, popup)))
-        box.add_widget(mk('② 悬停时间（当前 %ss）' % it.get('p1', 0), ACCENT,
-                          lambda: self._menu_hold(sid, seq, popup)))
-        kind = it.get('kind')
-        ktxt = '集合点' if kind == 'collect' else ('离散点' if kind == 'disperse' else '普通')
-        box.add_widget(mk('③ 设为集合点（当前:%s）' % ktxt, ACCENT,
-                          lambda: self._menu_kind(sid, seq, popup, 'collect')))
-        box.add_widget(mk('④ 设为离散点（当前:%s）' % ktxt, ACCENT,
-                          lambda: self._menu_kind(sid, seq, popup, 'disperse')))
-        box.add_widget(mk('⑤ 添加投弹任务（184）', DANGER,
-                          lambda: self._bomb_double_tap(sid, popup)))
-        box.add_widget(mk('⑥ 返航点 RTL', ACCENT,
-                          lambda: self._rtl_double_tap(sid, popup)))
-        box.add_widget(mk('⑦ 清除任务', GRAY,
-                          lambda: self._clear_double_tap(sid, popup)))
-        popup.content = box
-        Clock.schedule_once(lambda *a: popup.open(), 0.05)
-        self._append_log('地图双击：%s号机 #%s 功能菜单 (%.5f, %.5f)' % (sid, seq, lat, lng))
+        """双击地图：不再弹菜单——改用下方「功能导航」+ 任务表选行操作"""
+        self._append_log('双击地图：请在下方「功能导航」选择操作，并先点任务表选中航点')
 
     def _nearest_wp_seq_at(self, lat, lng, v):
         """双击点附近(屏幕~28px≈标记/几米)是否有已有航点；有则返回其 seq"""
@@ -1131,6 +1141,9 @@ class SwarmMobileApp(App):
 
     def _menu_kind(self, sid, seq, popup, kind):
         popup.dismiss()
+        if seq is None:
+            self._append_log('请先在任务表点选一个航点')
+            return
         v = self.fleet.vehicle(sid)
         if v and v.mission and seq < len(v.mission):
             if v.mission[seq].get('kind') == kind:
@@ -1141,6 +1154,9 @@ class SwarmMobileApp(App):
             self._append_log('%s号机 #%s 设为%s' % (sid, seq, '集合点' if kind == 'collect' else '离散点'))
 
     def _set_wp_alt(self, sid, seq, val):
+        if seq is None:
+            self._append_log('请先在任务表点选一个航点，再设高度')
+            return
         try:
             altv = float(val)
         except Exception:
@@ -1153,6 +1169,9 @@ class SwarmMobileApp(App):
             self._append_log('%s号机 #%s 高度=%sm' % (sid, seq, altv))
 
     def _set_wp_hold(self, sid, seq, val):
+        if seq is None:
+            self._append_log('请先在任务表点选一个航点，再设悬停')
+            return
         try:
             sec = float(val)
         except Exception:
@@ -1164,11 +1183,12 @@ class SwarmMobileApp(App):
             self._refresh_mission_table()
             self._append_log('%s号机 #%s 悬停=%ss' % (sid, seq, sec))
 
-    def _input_dialog(self, title, label, on_ok):
+    def _input_dialog(self, title, label, on_ok, default=None, input_filter='float'):
         popup = Popup(title=title, size_hint=(0.82, 0.42), auto_dismiss=True)
         box = BoxLayout(orientation='vertical', spacing=10, padding=14)
         box.add_widget(Label(text=label, halign='center', font_size='15sp'))
-        tin = CompactTextInput(hint_text=label, input_filter='float', font_size='18sp')
+        tin = CompactTextInput(text=str(default) if default is not None else '',
+                               hint_text=label, input_filter=input_filter, font_size='18sp')
         box.add_widget(tin)
         row = BoxLayout(size_hint_y=None, height='46dp', spacing=10)
         row.add_widget(self._mk_btn('确定', ACCENT, lambda: (popup.dismiss(), on_ok(tin.text)),
@@ -1192,18 +1212,36 @@ class SwarmMobileApp(App):
         self._refresh_mission_table()
         self._append_log('%s号机 已插入投弹点' % sid)
 
+    def _bomb_servo_set(self, sid, popup):
+        popup.dismiss()
+        bcfg = self.cfg.setdefault('bomb', {})
+        cur = '%d,%s' % (bcfg.get('servo', 6), bcfg.get('pwm', 2000))
+        self._input_dialog('投弹舵机设置（%s号机）' % sid, '舵机号,PWM（如 6,2000）',
+                           lambda val: self._bomb_servo_apply(val),
+                           default=cur, input_filter=None)
+
+    def _bomb_servo_apply(self, val):
+        try:
+            parts = val.replace('，', ',').split(',')
+            servo = int(parts[0].strip())
+            pwm = int(parts[1].strip()) if len(parts) > 1 and parts[1].strip() else 2000
+            b = self.cfg.setdefault('bomb', {})
+            b['servo'] = servo
+            b['pwm'] = pwm
+            self._append_log('投弹设置：%d 号舵机，PWM %d（下次「添加投弹」生效）' % (servo, pwm))
+        except Exception:
+            self._append_log('设置无效：请填 舵机号,PWM（如 6,2000）')
+
     def _clear_double_tap(self, sid, popup):
         popup.dismiss()
         self._confirm('清空航线', '清除 %s号机全部任务航点？' % sid,
                       lambda: self._clear_mission_tgt(sid))
 
     def _clear_mission_tgt(self, sid):
-        if not self.fleet.connected:
-            self._append_log('未连接：无法清空航线')
-            return
+        # 清除本地任务不依赖连接（上传才写飞机）
         self.fleet.clear_mission(sid)
         self._refresh_mission_table()
-        self._append_log('%s号机 航线已清空' % sid)
+        self._append_log('%s号机 任务已清空（本地）' % sid)
 
     def _rtl_double_tap(self, sid, popup):
         popup.dismiss()
@@ -1216,6 +1254,28 @@ class SwarmMobileApp(App):
             return
         self.fleet.rtl(sid)
         self._append_log('%s号机 返航指令已发' % sid)
+
+    def _takeoff_double_tap(self, sid, popup):
+        popup.dismiss()
+        self._input_dialog('起飞 Takeoff（%s号机）' % sid, '起飞高度(m)',
+                           lambda val: self._takeoff_tgt(sid, val),
+                           default=str(self._tof_alt()))
+
+    def _takeoff_tgt(self, sid, alt_s):
+        if not self.fleet.connected:
+            self._append_log('未连接：无法起飞')
+            return
+        try:
+            alt = float(alt_s) if alt_s.strip() else float(self._tof_alt())
+        except Exception:
+            self._append_log('起飞高度无效：%s' % alt_s)
+            return
+        try:
+            ok = self.fleet.takeoff(sid, alt)
+            self._append_log('%s号机 起飞指令已发（%sm）' % (sid, alt)
+                             if ok else '%s号机 起飞发送失败' % sid)
+        except Exception as e:
+            self._append_log('起飞失败：%s' % e)
 
     def _on_open_map(self):
         """打开高德卫星地图：以首架在线机（或默认）为中心，点击取点"""
