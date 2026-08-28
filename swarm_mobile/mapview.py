@@ -168,15 +168,18 @@ class TileCell(AsyncImage):
         return os.path.join(d, 't_%s_%d_%d_%d.jpg' % (s, self._tx, self._ty, self._z))
 
     def _refresh_source(self):
-        # cache hit -> local file (instant); miss -> background download then save to disk
+        # 有效磁盘缓存 -> 本地秒读；否则直接 source=瓦片网址（Kivy 自带直连=
+        # 旧版已验证显示路径，任何缓存/线程异常都不影响出图）。
+        # 后台线程只做「预下载落盘」加速下次打开，失败绝不阻塞显示。
         if self._fetching:
             return
         s = _SUB[(self._tx * 7 + self._ty) % 4]
         p = self._cache_path(s)
-        if p and os.path.exists(p):
+        if p and os.path.exists(p) and os.path.getsize(p) > 200:
             self.source = p
-            return
-        self._start_download(s)
+        else:
+            self.source = self._tile_url(s)
+            self._start_download(s)
 
     def _start_download(self, s):
         self._fetching = True
@@ -203,7 +206,8 @@ class TileCell(AsyncImage):
                             f.write(data)
                     except Exception:
                         pass
-                self.source = p if p else self._tile_url(s)
+                if not self._loaded:
+                    self.source = p if p else self._tile_url(s)
             else:
                 self._on_download_failed()
         except Exception:
@@ -216,7 +220,19 @@ class TileCell(AsyncImage):
             self._start_download(s)
 
     def _on_tile_error(self, *a):
-        # local file rarely errors; fallback retry on any error
+        # 加载失败：若来源是本地缓存文件，删掉损坏缓存回退直连网址，再走重试
+        try:
+            _src = self.source
+            if _src and str(_src).startswith('/') and str(_src).endswith(('.jpg', '.png')):
+                p = _src if isinstance(_src, str) else str(_src)
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+                self.source = self._tile_url(_SUB[(self._tx * 7 + self._ty) % 4])
+        except Exception:
+            pass
         self._on_download_failed()
 
     def _on_tile_loaded(self, *a):
