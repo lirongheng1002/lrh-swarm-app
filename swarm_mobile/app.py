@@ -77,6 +77,7 @@ def _dft():
         'formation': {'spacing_f': 5, 'spacing_l': 5, 'spacing_g': 10},
         'takeoff': {'alt_m': 20},
         'bomb': {'servo': 6, 'pwm': 2000, 'count': 1, 'time': 1},
+        'map': {'gps_is_gcj': False},
     }
 
 
@@ -194,6 +195,8 @@ class SwarmMobileApp(App):
         # 统一深色底：按钮圆角外/输入框周边不再是透明区外露（领导：消除透明框）
         Window.clearcolor = (0.08, 0.1, 0.12, 1)
         self._sel_seq = None          # 任务表选中 seq
+        self._row_last_tap_t = 0        # 任务表行双击检测
+        self._row_last_seq = None
         self._sel_sys = 1             # 单机区选中机
         self._fm_st = '编队:关'
 
@@ -322,7 +325,8 @@ class SwarmMobileApp(App):
         self._map_page = mapview.MapPage(center=self._map_default_center(),
                                          zoom=14, embedded=True,
                                          on_pick=self._on_map_pick_embed,
-                                         on_double_tap=self._on_map_double_tap)
+                                         on_double_tap=self._on_map_double_tap,
+                                         gps_is_gcj=bool(self.cfg.get('map', {}).get('gps_is_gcj', False)))
         self._map_page.size_hint = (1, 1)
         map_holder.add_widget(self._map_page)
         self._map_route_layer = mapview._RouteLayer(self._map_page)
@@ -922,10 +926,110 @@ class SwarmMobileApp(App):
         self._refresh_mission_table()
 
     def _mission_row_touch(self, row, touch, seq):
-        if row.collide_point(*touch.pos):
-            self._on_mission_row(seq)
+        if not row.collide_point(*touch.pos):
+            return False
+        now = touch.time_start
+        # 双击行：判断点的是哪列 -> 指令菜单 / 编辑高度 / 悬停 / 经纬度
+        if self._row_last_tap_t and now - self._row_last_tap_t < 0.45 and self._row_last_seq == seq:
+            self._row_last_tap_t = 0
+            rel = (touch.x - row.x) / max(1.0, row.width)
+            if rel < 0.28:
+                col = 0      # 序号/指令列 -> 指令切换菜单
+            elif rel < 0.64:
+                col = 2      # 位置列 -> 编辑经纬度
+            elif rel < 0.78:
+                col = 3      # 高度列 -> 编辑高度
+            else:
+                col = 4      # 悬停列 -> 编辑悬停
+            self._row_double_tap(seq, col)
             return True
-        return False
+        self._row_last_tap_t = now
+        self._row_last_seq = seq
+        self._on_mission_row(seq)
+        return True
+
+    def _row_double_tap(self, seq, col):
+        if col == 0:
+            self._row_cmd_menu(seq)
+        elif col == 2:
+            self._edit_wp_pos(seq)
+        elif col == 3:
+            self._edit_wp_alt(seq)
+        elif col == 4:
+            self._edit_wp_hold(seq)
+
+    def _row_cmd_menu(self, seq):
+        """双击航点行：切指令（起飞/投弹/返航/集合/离散/清除）"""
+        sid = self._mission_sysid()
+        v = self.fleet.vehicle(sid)
+        if not v or not v.mission or seq >= len(v.mission):
+            return
+        popup = Popup(title='航点指令 · #%s' % seq, size_hint=(0.85, 0.62), auto_dismiss=True)
+        box = BoxLayout(orientation='vertical', spacing=6, padding=12)
+        mk = lambda t, c, cb: self._mk_btn(t, c, cb, size_hint_y=None, height='46dp', font_size='15sp')
+        box.add_widget(mk('起飞 Takeoff（%sm）' % self._tof_alt(), OK,
+                          lambda: self._takeoff_double_tap(sid, popup)))
+        box.add_widget(mk('投弹任务（184）', DANGER, lambda: self._bomb_double_tap(sid, popup)))
+        box.add_widget(mk('返航 RTL', ACCENT, lambda: self._rtl_double_tap(sid, popup)))
+        kind = v.mission[seq].get('kind')
+        ktxt = '集合点' if kind == 'collect' else ('离散点' if kind == 'disperse' else '普通')
+        box.add_widget(mk('设为集合点（当前:%s）' % ktxt, ACCENT,
+                          lambda: self._menu_kind(sid, seq, popup, 'collect')))
+        box.add_widget(mk('设为离散点（当前:%s）' % ktxt, ACCENT,
+                          lambda: self._menu_kind(sid, seq, popup, 'disperse')))
+        box.add_widget(mk('清除任务', GRAY, lambda: self._clear_double_tap(sid, popup)))
+        popup.content = box
+        Clock.schedule_once(lambda *a: popup.open(), 0.05)
+
+    def _edit_wp_alt(self, seq):
+        sid = self._mission_sysid()
+        v = self.fleet.vehicle(sid)
+        if not v or not v.mission or seq >= len(v.mission):
+            self._append_log('无此航点')
+            return
+        self._input_dialog('编辑高度（#%s）' % seq, '高度(m)',
+                           lambda val: self._set_wp_alt(sid, seq, val),
+                           default=str(v.mission[seq].get('alt', 0)))
+
+    def _edit_wp_hold(self, seq):
+        sid = self._mission_sysid()
+        v = self.fleet.vehicle(sid)
+        if not v or not v.mission or seq >= len(v.mission):
+            self._append_log('无此航点')
+            return
+        self._input_dialog('编辑悬停（#%s）' % seq, '悬停(秒)',
+                           lambda val: self._set_wp_hold(sid, seq, val),
+                           default=str(v.mission[seq].get('p1', 0)))
+
+    def _edit_wp_pos(self, seq):
+        sid = self._mission_sysid()
+        v = self.fleet.vehicle(sid)
+        if not v or not v.mission or seq >= len(v.mission):
+            self._append_log('无此航点')
+            return
+        it = v.mission[seq]
+        cur = '%.6f,%.6f' % (it.get('lat', 0), it.get('lon', 0))
+        self._input_dialog('编辑经纬度（#%s）' % seq, '纬度,经度',
+                           lambda val: self._set_wp_pos(sid, seq, val),
+                           default=cur, input_filter=None)
+
+    def _set_wp_pos(self, sid, seq, val):
+        try:
+            parts = val.replace('，', ',').split(',')
+            lat = float(parts[0].strip())
+            lon = float(parts[1].strip())
+        except Exception:
+            self._append_log('经纬度无效，格式：纬度,经度')
+            return
+        v = self.fleet.vehicle(sid)
+        if v and v.mission and seq < len(v.mission):
+            v.mission[seq]['lat'] = lat
+            v.mission[seq]['lon'] = lon
+            self._refresh_mission_table()
+            self._map_page._center = (lat, lon)
+            self._map_page._zoom = max(self._map_page._zoom, 15)
+            self._map_page._rebuild()
+            self._append_log('%s号机 #%s 经纬度已改 (%.6f, %.6f)——地图已定位' % (sid, seq, lat, lon))
 
     def _on_download_mission(self, _x):
         if not self.fleet.connected:
@@ -1010,14 +1114,21 @@ class SwarmMobileApp(App):
         try:
             lat = float(self._wp_lat.text)
             lon = float(self._wp_lon.text)
-            alt = float(self._wp_alt.text)
         except Exception:
-            self._append_log('加航点失败：纬度/经度/高度未填全')
+            self._append_log('加航点失败：纬度/经度未填全')
             return
+        try:
+            alt = float(self._wp_alt.text) if self._wp_alt.text.strip() else 100.0
+        except Exception:
+            alt = 100.0
         sid = self._mission_sysid()
         self.fleet.append_waypoint(sid, lat, lon, alt)
         self._refresh_mission_table()
-        self._append_log('%s号机 已加航点 (%.6f, %.6f, %sm)——点「上传任务」写入飞机' % (
+        # 地图拉到新航点（定位）
+        self._map_page._center = (lat, lon)
+        self._map_page._zoom = max(self._map_page._zoom, 15)
+        self._map_page._rebuild()
+        self._append_log('%s号机 已加航点 (%.6f, %.6f, %sm)——地图已定位到此点' % (
             sid, lat, lon, alt))
 
     def _on_add_bomb(self, _x):
@@ -1101,7 +1212,7 @@ class SwarmMobileApp(App):
         cx_px, cy_px = pc
         gx, gy = g.center_x, g.center_y
         try:
-            llat_gcj, llng_gcj = mapview.wgs84_to_gcj02(lat, lng)
+            llat_gcj, llng_gcj = mp._to_disp(lat, lng)
             dpx = mapview._lng_to_px(llng_gcj, z)
             dpy = mapview._lat_to_px(llat_gcj, z)
             dsx = gx + (dpx - cx_px)
@@ -1116,7 +1227,7 @@ class SwarmMobileApp(App):
             if not ilat or not ilon or abs(ilat) < 1 or abs(ilon) < 1:
                 continue
             try:
-                ilat_gcj, ilng_gcj = mapview.wgs84_to_gcj02(ilat, ilon)
+                ilat_gcj, ilng_gcj = mp._to_disp(ilat, ilon)
                 px = mapview._lng_to_px(ilng_gcj, z)
                 py = mapview._lat_to_px(ilat_gcj, z)
                 sx = gx + (px - cx_px)
@@ -1310,7 +1421,11 @@ class SwarmMobileApp(App):
     def _on_coord_result(self, lat, lon):
         self._wp_lat.text = '%.6f' % lat
         self._wp_lon.text = '%.6f' % lon
-        self._append_log('坐标换算回填：北纬 %.6f 东经 %.6f —— 填好高度后点「加航点」' % (lat, lon))
+        # 地图预览（直接定位到换算出的点）
+        self._map_page._center = (lat, lon)
+        self._map_page._zoom = max(self._map_page._zoom, 15)
+        self._map_page._rebuild()
+        self._append_log('坐标换算回填：北纬 %.6f 东经 %.6f —— 地图已定位到此点' % (lat, lon))
 
     # ---------------- 回调 ----------------
     def _sp_mode_all_mode(self):

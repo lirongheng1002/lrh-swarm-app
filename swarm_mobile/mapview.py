@@ -187,7 +187,7 @@ class _RouteLayer(Widget):
         pts = []
         for (lat, lon) in self._route:
             try:
-                lat_gcj, lng_gcj = wgs84_to_gcj02(lat, lon)
+                lat_gcj, lng_gcj = self._map._to_disp(lat, lon)
                 px_x = _lng_to_px(lng_gcj, z)
                 px_y = _lat_to_px(lat_gcj, z)
                 sx = gx + (px_x - cx_px)
@@ -207,7 +207,7 @@ class _RouteLayer(Widget):
             H = getattr(m, 'height', 0)
             for (sysid, lat, lon, satellites) in self._planes:
                 try:
-                    lat_gcj, lng_gcj = wgs84_to_gcj02(lat, lon)
+                    lat_gcj, lng_gcj = self._map._to_disp(lat, lon)
                     px_x = _lng_to_px(lng_gcj, z)
                     px_y = _lat_to_px(lat_gcj, z)
                     sx = gx + (px_x - cx_px)
@@ -239,7 +239,7 @@ class _RouteLayer(Widget):
         gx, gy = m._grid.center_x, m._grid.center_y
         for (sysid, lat, lon, satellites) in self._planes:
             try:
-                lat_gcj, lng_gcj = wgs84_to_gcj02(lat, lon)
+                lat_gcj, lng_gcj = self._map._to_disp(lat, lon)
                 px_x = _lng_to_px(lng_gcj, z)
                 px_y = _lat_to_px(lat_gcj, z)
                 sx = gx + (px_x - cx_px)
@@ -268,11 +268,15 @@ class MapPage(BoxLayout):
     - 双指捏合/张开：缩放地图（zoom 3~18）
     """
     def __init__(self, center=(31.2304, 121.4737), zoom=15, on_pick=None,
-                 on_close=None, embedded=False, on_double_tap=None, **kw):
+                 on_close=None, embedded=False, on_double_tap=None,
+                 gps_is_gcj=False, **kw):
         kw.setdefault('orientation', 'vertical')
         kw.setdefault('spacing', 4)
         kw.setdefault('padding', 4)
         super(MapPage, self).__init__(**kw)
+        self.gps_is_gcj = bool(gps_is_gcj)   # GPS 已是 GCJ 则不重复转换
+        self._to_disp = self._disp_or_gcj
+        self._to_air = self._air_or_gcj
         self._center = center          # (lat, lng) WGS84
         self._zoom = max(3, min(18, int(zoom)))
         self._on_pick = on_pick
@@ -290,12 +294,29 @@ class MapPage(BoxLayout):
         self._drag_cb = None
         self._pending_pick = None    # (lat,lng) 待加点（双击则取消）
         self._pick_uid = None        # 延迟加点的 Clock id
+        # 地图平移（长按空白处拖动）
+        self._panning = False
+        self._pan_touch_id = None
+        self._pan_start_pos = None
+        self._pan_start_center = None
         self._cells = []
         self._touches = {}             # touch.id -> touch（用于双指捏合）
         self._pinch_start_dist = None
         self._px_center = None
         self.bind(size=self._on_resize)
         self._rebuild()
+
+    def _disp_or_gcj(self, lat, lon):
+        """飞机坐标 -> 地图显示坐标(GCJ)；若 GPS 已是 GCJ 则原样"""
+        if self.gps_is_gcj:
+            return lat, lon
+        return wgs84_to_gcj02(lat, lon)
+
+    def _air_or_gcj(self, lat, lon):
+        """地图(GCJ)点 -> 原坐标(WGS)；若 GPS 已是 GCJ 则原样"""
+        if self.gps_is_gcj:
+            return lat, lon
+        return gcj02_to_wgs84(lat, lon)
 
     def _on_resize(self, *a):
         # Popup 打开瞬间尺寸可能为 0——此时重建瓦片会算错/卡死，跳过等首次有效尺寸
@@ -316,7 +337,7 @@ class MapPage(BoxLayout):
         if self.width < 100 or self.height < 100:
             return
         self._center = tuple(self._center)
-        lat, lng = wgs84_to_gcj02(self._center[0], self._center[1])
+        lat, lng = self._to_disp(self._center[0], self._center[1])
         z = self._zoom
         cx_px = _lng_to_px(lng, z)
         cy_px = _lat_to_px(lat, z)
@@ -363,10 +384,18 @@ class MapPage(BoxLayout):
         gy = g.center_y if g else self.center_y
         px_x = cx_px + (pos[0] - gx)
         px_y = cy_px - (pos[1] - gy)
-        return gcj02_to_wgs84(_px_to_lat(px_y, z), _px_to_lng(px_x, z))
+        return self._to_air(_px_to_lat(px_y, z), _px_to_lng(px_x, z))
 
     # ---------------- 双指捏合缩放 ----------------
     def on_touch_down(self, touch):
+        # 鼠标滚轮（部分平台以 touch 形式派发，button 字段含方向）
+        if getattr(touch, 'is_mouse_scrolling', False):
+            self._wheel_dbg('wheel', 'btn=' + str(getattr(touch, 'button', '')))
+            try:
+                self._wheel_zoom(touch)
+            except Exception:
+                pass
+            return True
         if not self.collide_point(*touch.pos):
             return super(MapPage, self).on_touch_down(touch)
         # 双击检测：0.35s 内再次点击 = 双击（弹任务菜单，类似电脑端右键）
@@ -385,10 +414,11 @@ class MapPage(BoxLayout):
         self._touches[touch.id] = touch
         if len(self._touches) == 2:
             self._pinch_start_dist = self._pinch_dist()
-            # 双指=捏合缩放：取消第一指的单击加点/长按（防误触）
+            # 双指=捏合缩放：取消第一指的单击加点/长按/平移（防误触）
             self._pending_pick = None
             self._cancel_pick_add()
             self._cancel_long_press()
+            self._panning = False
         # 长按检测：单指按住 0.5s 不动 -> 拖动航点
         self._down_pos = touch.pos
         if len(self._touches) == 1 and not self._drag_idx:
@@ -405,36 +435,83 @@ class MapPage(BoxLayout):
             lat, lng = self._tap_lat_lng(touch.pos)
             self._fire_drag('move', self._drag_idx, lat, lng)
             return True
+        # 平移地图（长按空白处后拖动）
+        if self._panning and self._pan_touch_id == touch.id:
+            dx = touch.pos[0] - self._pan_start_pos[0]
+            dy = touch.pos[1] - self._pan_start_pos[1]
+            self._pan_map(dx, dy)
+            return True
         if len(self._touches) >= 2:
             d = self._pinch_dist()
             if self._pinch_start_dist and self._pinch_start_dist > 0:
                 ratio = d / self._pinch_start_dist
-                if ratio > 1.05 and self._zoom < 18:
+                if ratio > 1.03 and self._zoom < 18:
                     self._zoom += 1
                     self._pinch_start_dist = d
                     self._rebuild()
-                elif ratio < 0.95 and self._zoom > 3:
+                elif ratio < 0.97 and self._zoom > 3:
                     self._zoom -= 1
                     self._pinch_start_dist = d
                     self._rebuild()
         return super(MapPage, self).on_touch_move(touch)
 
-    def on_scroll_start(self, touch, check=True):
-        """鼠标滚轮缩放（电脑/桌面可用）"""
+    def _wheel_zoom(self, touch):
+        """鼠标滚轮缩放：scrollup=放大 / scrolldown=缩小（兼容 scroll_y）"""
         try:
-            if getattr(touch, 'is_mouse_scrolling', False):
-                dy = getattr(touch, 'scroll_y', 0)
-                if dy and self.collide_point(*touch.pos):
-                    if dy > 0 and self._zoom < 18:
-                        self._zoom += 1
-                        self._rebuild()
-                    elif dy < 0 and self._zoom > 3:
-                        self._zoom -= 1
-                        self._rebuild()
+            if not self.collide_point(*touch.pos):
+                return False
+            btn = getattr(touch, 'button', '')
+            if btn == 'scrollup':
+                if self._zoom < 18:
+                    self._zoom += 1
+                    self._rebuild()
+                    self._wheel_dbg('fwd', 'zoom ' + str(self._zoom))
+                    return True
+            elif btn == 'scrolldown':
+                if self._zoom > 3:
+                    self._zoom -= 1
+                    self._rebuild()
+                    self._wheel_dbg('back', 'zoom ' + str(self._zoom))
+                    return True
+            else:
+                dy = getattr(touch, 'scroll_y', 0) or 0
+                if dy > 0 and self._zoom < 18:
+                    self._zoom += 1
+                    self._rebuild()
+                    return True
+                elif dy < 0 and self._zoom > 3:
+                    self._zoom -= 1
+                    self._rebuild()
                     return True
         except Exception:
             pass
+        return False
+
+    def _wheel_dbg(self, ev, msg):
+        # 调试已关闭（滚轮缩放已修复，方向读 touch.button）
+        pass
+
+    def on_scroll_start(self, touch, check=True):
+        try:
+            sy = getattr(touch, 'scroll_y', 0)
+            sx = getattr(touch, 'scroll_x', 0)
+            if self.collide_point(*touch.pos):
+                self._wheel_dbg('sstart', 'sy=' + str(sy) + ' sx=' + str(sx))
+            if self._wheel_zoom(touch):
+                return True
+        except Exception:
+            pass
         return super(MapPage, self).on_scroll_start(touch, check=check)
+
+    def on_scroll_move(self, touch, check=True):
+        if self._wheel_zoom(touch):
+            return True
+        return super(MapPage, self).on_scroll_move(touch, check=check)
+
+    def on_scroll_stop(self, touch, check=True):
+        if self._wheel_zoom(touch):
+            return True
+        return super(MapPage, self).on_scroll_stop(touch, check=check)
 
     def on_touch_up(self, touch):
         # 结束拖动航点
@@ -454,6 +531,9 @@ class MapPage(BoxLayout):
                 self._pinch_start_dist = None
             return True
         self._cancel_long_press()
+        if self._panning and self._pan_touch_id == touch.id:
+            self._panning = False
+            self._pan_touch_id = None
         if touch.id in self._touches:
             del self._touches[touch.id]
         try:
@@ -507,16 +587,22 @@ class MapPage(BoxLayout):
 
     def _on_long_press(self, touch):
         self._long_press_uid = None
-        self._pending_pick = None   # 长按不添加点（拖动）
-        # 用按下位置找最近航点（按住移动也锁定按下时那个点）
+        self._pending_pick = None   # 长按不添加点
         pos = self._down_pos or touch.pos
-        if len(self._touches) != 1 or not self._drag_points:
+        if len(self._touches) != 1:
             return
         idx, lat, lon = self._nearest_drag_point(pos)
         if idx is not None:
+            # 长按航点 -> 拖航点
             self._drag_idx = idx
             self._drag_touch_id = touch.id
             self._fire_drag('start', idx, lat, lon)
+        else:
+            # 长按空白 -> 平移地图
+            self._panning = True
+            self._pan_touch_id = touch.id
+            self._pan_start_pos = tuple(pos)
+            self._pan_start_center = tuple(self._center)
 
     def _nearest_drag_point(self, pos):
         z = self._zoom
@@ -530,7 +616,7 @@ class MapPage(BoxLayout):
         best = None
         for (idx, lat, lon) in self._drag_points:
             try:
-                lat_gcj, lng_gcj = wgs84_to_gcj02(lat, lon)
+                lat_gcj, lng_gcj = self._to_disp(lat, lon)
                 px_x = _lng_to_px(lng_gcj, z)
                 px_y = _lat_to_px(lat_gcj, z)
                 sx = gx + (px_x - cx_px)
@@ -551,3 +637,18 @@ class MapPage(BoxLayout):
                 self._drag_cb(ev, idx, lat, lon)
             except Exception:
                 pass
+
+    def _pan_map(self, dx, dy):
+        """按屏幕位移平移地图中心"""
+        try:
+            z = self._zoom
+            cx_px, cy_px = self._px_center
+            new_cx = cx_px - dx
+            new_cy = cy_px + dy
+            lat_gcj = _px_to_lat(new_cy, z)
+            lng_gcj = _px_to_lng(new_cx, z)
+            lat, lng = self._to_air(lat_gcj, lng_gcj)
+            self._center = (lat, lng)
+            self._rebuild()
+        except Exception:
+            pass
