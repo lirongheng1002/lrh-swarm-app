@@ -370,7 +370,7 @@ class MapPage(BoxLayout):
         if not self.collide_point(*touch.pos):
             return super(MapPage, self).on_touch_down(touch)
         # 双击检测：0.35s 内再次点击 = 双击（弹任务菜单，类似电脑端右键）
-        if self._last_tap_t and touch.time_start - self._last_tap_t < 0.35:
+        if self._last_tap_t and touch.time_start - self._last_tap_t < 0.45:
             self._last_tap_t = 0
             self._cancel_pick_add()   # 双击：取消单击加点（只开菜单不加点）
             self._pending_pick = None
@@ -385,6 +385,10 @@ class MapPage(BoxLayout):
         self._touches[touch.id] = touch
         if len(self._touches) == 2:
             self._pinch_start_dist = self._pinch_dist()
+            # 双指=捏合缩放：取消第一指的单击加点/长按（防误触）
+            self._pending_pick = None
+            self._cancel_pick_add()
+            self._cancel_long_press()
         # 长按检测：单指按住 0.5s 不动 -> 拖动航点
         self._down_pos = touch.pos
         if len(self._touches) == 1 and not self._drag_idx:
@@ -486,7 +490,7 @@ class MapPage(BoxLayout):
     def _schedule_pick_add(self, lat, lng):
         self._cancel_pick_add()
         self._pick_uid = Clock.schedule_once(
-            lambda dt: self._commit_pick(lat, lng), 0.3)
+            lambda dt: self._commit_pick(lat, lng), 0.45)
 
     def _cancel_pick_add(self):
         if self._pick_uid:
