@@ -126,8 +126,10 @@ class TileCell(AsyncImage):
         self._on_tap = on_tap
         self._lbl = None
         self._retry = -1
+        self._loaded = False
         self._refresh_source()
         self.bind(on_error=self._on_tile_error)
+        self.bind(on_load=self._on_tile_loaded)
 
     def _tile_url(self, s):
         return _TILE_URL.format(s=s, x=self._tx, y=self._ty, z=self._z)
@@ -137,11 +139,16 @@ class TileCell(AsyncImage):
         self.source = self._tile_url(s)
 
     def _on_tile_error(self, *a):
-        # 加载失败重试几次（ESRI 无子域，重试同一地址）
+        # 加载失败重试几次（换子域；8 次耗尽后由地图页 3 秒定时器自动再请求）
         self._retry += 1
         if self._retry < 8:
             s = _SUB[(self._tx * 7 + self._ty + self._retry) % 4]
             self.source = self._tile_url(s)
+
+    def _on_tile_loaded(self, *a):
+        """瓦片加载成功：标记已加载、复位重试计数"""
+        self._loaded = True
+        self._retry = -1
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
@@ -303,8 +310,11 @@ class MapPage(BoxLayout):
         self._touches = {}             # touch.id -> touch（用于双指捏合）
         self._pinch_start_dist = None
         self._px_center = None
+        self._zoom_dt_uid = None
         self.bind(size=self._on_resize)
         self._rebuild()
+        # 瓦片自动恢复：重试已耗尽的格子每 3 秒重新请求（4G 抖动后自动补黑格）
+        Clock.schedule_interval(self._tile_recover, 3.0)
 
     def _disp_or_gcj(self, lat, lon):
         """飞机坐标 -> 地图显示坐标(GCJ)；若 GPS 已是 GCJ 则原样"""
@@ -322,6 +332,30 @@ class MapPage(BoxLayout):
         # Popup 打开瞬间尺寸可能为 0——此时重建瓦片会算错/卡死，跳过等首次有效尺寸
         if self.width < 100 or self.height < 100:
             return
+        try:
+            self._rebuild()
+        except Exception:
+            pass
+
+    def _tile_recover(self, *a):
+        """自动补齐加载失败的瓦片：重试已耗尽(>=8)且未加载的格子每 3 秒重新请求"""
+        try:
+            for (cell, tx, ty) in list(self._cells):
+                if not getattr(cell, '_loaded', False) and cell._retry >= 8:
+                    cell._retry = -1
+                    cell._refresh_source()
+        except Exception:
+            pass
+
+    def _zoom_rebuild(self):
+        """缩放防抖：手势/连滚停止 0.15s 后只重建一次（不再每步重建 9 张瓦片）"""
+        if self._zoom_dt_uid:
+            Clock.unschedule(self._zoom_dt_uid)
+        self._zoom_dt_uid = Clock.schedule_once(
+            lambda dt: self._do_rebuild_safe(), 0.15)
+
+    def _do_rebuild_safe(self):
+        self._zoom_dt_uid = None
         try:
             self._rebuild()
         except Exception:
@@ -448,11 +482,11 @@ class MapPage(BoxLayout):
                 if ratio > 1.03 and self._zoom < 18:
                     self._zoom += 1
                     self._pinch_start_dist = d
-                    self._rebuild()
+                    self._zoom_rebuild()
                 elif ratio < 0.97 and self._zoom > 3:
                     self._zoom -= 1
                     self._pinch_start_dist = d
-                    self._rebuild()
+                    self._zoom_rebuild()
         return super(MapPage, self).on_touch_move(touch)
 
     def _wheel_zoom(self, touch):
@@ -464,24 +498,24 @@ class MapPage(BoxLayout):
             if btn == 'scrollup':
                 if self._zoom < 18:
                     self._zoom += 1
-                    self._rebuild()
+                    self._zoom_rebuild()
                     self._wheel_dbg('fwd', 'zoom ' + str(self._zoom))
                     return True
             elif btn == 'scrolldown':
                 if self._zoom > 3:
                     self._zoom -= 1
-                    self._rebuild()
+                    self._zoom_rebuild()
                     self._wheel_dbg('back', 'zoom ' + str(self._zoom))
                     return True
             else:
                 dy = getattr(touch, 'scroll_y', 0) or 0
                 if dy > 0 and self._zoom < 18:
                     self._zoom += 1
-                    self._rebuild()
+                    self._zoom_rebuild()
                     return True
                 elif dy < 0 and self._zoom > 3:
                     self._zoom -= 1
-                    self._rebuild()
+                    self._zoom_rebuild()
                     return True
         except Exception:
             pass
