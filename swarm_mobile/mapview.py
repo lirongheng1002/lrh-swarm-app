@@ -31,6 +31,8 @@ _UA = 'Mozilla/5.0 (Linux; Android) LRH-swarm/1.2'
 
 # Tile disk cache: already-viewed tiles read from local disk instantly (same as desktop console)
 _TILE_CACHE_DIR = {'d': None}
+# 后台落盘限流：最多 3 路并发写缓存（旧版 9 路直连不轰服务器，新版不要 18 路）
+_DL_SEM = threading.Semaphore(3)
 
 
 def _tile_cache_dir():
@@ -182,14 +184,14 @@ class TileCell(AsyncImage):
             self._start_download(s)
 
     def _start_download(self, s):
-        self._fetching = True
         def _dl():
             import urllib.request
             data = None
             try:
-                req = urllib.request.Request(self._tile_url(s), headers={'User-Agent': _UA})
-                with urllib.request.urlopen(req, timeout=8) as resp:
-                    data = resp.read()
+                with _DL_SEM:
+                    req = urllib.request.Request(self._tile_url(s), headers={'User-Agent': _UA})
+                    with urllib.request.urlopen(req, timeout=8) as resp:
+                        data = resp.read()
             except Exception:
                 data = None
             Clock.schedule_once(lambda dt: self._on_downloaded(s, data))
@@ -198,7 +200,7 @@ class TileCell(AsyncImage):
     def _on_downloaded(self, s, data):
         self._fetching = False
         try:
-            if data and len(data) > 200:
+            if data and len(data) > 200 and data[:2] == b'\xff\xd8':
                 p = self._cache_path(s)
                 if p:
                     try:
@@ -218,6 +220,9 @@ class TileCell(AsyncImage):
         if self._retry < 8:
             s = _SUB[(self._tx * 7 + self._ty + self._retry) % 4]
             self._start_download(s)
+        else:
+            # 重试耗尽：复位下载标志，交给 3s 自愈(_tile_recover)重新尝试
+            self._fetching = False
 
     def _on_tile_error(self, *a):
         # 加载失败：若来源是本地缓存文件，删掉损坏缓存回退直连网址，再走重试
@@ -513,6 +518,7 @@ class MapPage(BoxLayout):
             for (cell, tx, ty) in list(self._cells):
                 if not getattr(cell, '_loaded', False) and cell._retry >= 8:
                     cell._retry = -1
+                    cell._fetching = False
                     cell._refresh_source()
         except Exception:
             pass
@@ -853,6 +859,8 @@ class MapPage(BoxLayout):
             lng_gcj = _px_to_lng(new_cx, z)
             lat, lng = self._to_air(lat_gcj, lng_gcj)
             self._center = (lat, lng)
-            self._rebuild()
+            # 平移也走 0.15s 防抖重建：拖动中只更新中心，停手后重建一次，
+            # 不再每帧重建 9 格瓦片/每帧发起下载（4G 下卡顿+高失败率根源）
+            self._zoom_rebuild()
         except Exception:
             pass
