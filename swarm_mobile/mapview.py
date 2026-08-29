@@ -24,10 +24,24 @@ from math import hypot
 
 from .widgets import RoundedButton
 
-# ---------------- 高德瓦片 ----------------
-_TILE_URL = 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}'
+# ---------------- 高德瓦片（三种图源，对齐桌面 LRHwrkzxt map_tiles.py） ----------------
+# street=街道 / satellite=卫星 / hybrid=卫星+路网（桌面同款 TILE_SERVERS）
+TILE_SERVERS = {
+    'street':    'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+    'satellite': 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+    'hybrid':    'https://webst0{s}.is.autonavi.com/appmaptile?style=8&x={x}&y={y}&z={z}',
+}
+# 默认图源=卫星（与手机现有显示一致；切换图源只需设 MAP_STYLE）
+MAP_STYLE = 'satellite'
 _SUB = ['1', '2', '3', '4']
 _UA = 'Mozilla/5.0 (Linux; Android) LRH-swarm/1.2'
+
+# ---- 触控灵敏度参数（领导要求便于后续调整：改这里即可）----
+_PINCH_THRESHOLD = 1.008    # 双指捏合阈值：距离变化超过 0.8% 即触发一次缩放（原 1.03，提高 4 倍灵敏度）
+_PINCH_STEP_DIST = 0.08     # 捏合距离每增加 8% 再跳一级（快速连续缩放；配合阈值=平滑跟手）
+_PAN_DEBOUNCE = 0.05        # 单指平移防抖：0.05s（原 0.15s，拖动更跟手）
+_ZOOM_MIN = 3
+_ZOOM_MAX = 18
 
 # Tile disk cache: already-viewed tiles read from local disk instantly (same as desktop console)
 _TILE_CACHE_DIR = {'d': None}
@@ -161,7 +175,8 @@ class TileCell(AsyncImage):
         self.bind(on_load=self._on_tile_loaded)
 
     def _tile_url(self, s):
-        return _TILE_URL.format(s=s, x=self._tx, y=self._ty, z=self._z)
+        return TILE_SERVERS.get(MAP_STYLE, TILE_SERVERS['satellite']).format(
+            s=s, x=self._tx, y=self._ty, z=self._z)
 
     def _cache_path(self, s):
         d = _tile_cache_dir()
@@ -408,6 +423,7 @@ class MapPage(BoxLayout):
         self._pinch_start_dist = None
         self._px_center = None
         self._zoom_dt_uid = None
+        self._pan_dt_uid = None
         self.bind(size=self._on_resize)
         self._rebuild()
         # 瓦片自动恢复：重试已耗尽的格子每 3 秒重新请求（4G 抖动后自动补黑格）
@@ -524,11 +540,12 @@ class MapPage(BoxLayout):
             pass
 
     def _zoom_rebuild(self):
-        """缩放防抖：手势/连滚停止 0.15s 后只重建一次（不再每步重建 9 张瓦片）"""
+        """缩放防抖：手势/连滚停止后只重建一次（不再每步重建 9 张瓦片）
+        防抖 0.08s：比原 0.15s 快一倍，缩放响应更迅速，同时避免每步重建卡顿"""
         if self._zoom_dt_uid:
             Clock.unschedule(self._zoom_dt_uid)
         self._zoom_dt_uid = Clock.schedule_once(
-            lambda dt: self._do_rebuild_safe(), 0.15)
+            lambda dt: self._do_rebuild_safe(), 0.08)
 
     def _do_rebuild_safe(self):
         self._zoom_dt_uid = None
@@ -655,12 +672,17 @@ class MapPage(BoxLayout):
             d = self._pinch_dist()
             if self._pinch_start_dist and self._pinch_start_dist > 0:
                 ratio = d / self._pinch_start_dist
-                if ratio > 1.03 and self._zoom < 18:
-                    self._zoom += 1
+                # 高灵敏捏合：超过阈值即响应，按捏合量连续跳级（平滑跟手）
+                if ratio >= _PINCH_THRESHOLD:
+                    steps = int((ratio - 1.0) / _PINCH_STEP_DIST) or 1
+                    steps = min(steps, 2)  # 每次最多跳 2 级（防过猛）
+                    self._zoom = min(_ZOOM_MAX, self._zoom + steps)
                     self._pinch_start_dist = d
                     self._zoom_rebuild()
-                elif ratio < 0.97 and self._zoom > 3:
-                    self._zoom -= 1
+                elif ratio <= 1.0 / _PINCH_THRESHOLD:
+                    steps = int((1.0 - ratio) / _PINCH_STEP_DIST) or 1
+                    steps = min(steps, 2)
+                    self._zoom = max(_ZOOM_MIN, self._zoom - steps)
                     self._pinch_start_dist = d
                     self._zoom_rebuild()
         return super(MapPage, self).on_touch_move(touch)
@@ -672,24 +694,24 @@ class MapPage(BoxLayout):
                 return False
             btn = getattr(touch, 'button', '')
             if btn == 'scrollup':
-                if self._zoom < 18:
+                if self._zoom < _ZOOM_MAX:
                     self._zoom += 1
                     self._zoom_rebuild()
                     self._wheel_dbg('fwd', 'zoom ' + str(self._zoom))
                     return True
             elif btn == 'scrolldown':
-                if self._zoom > 3:
+                if self._zoom > _ZOOM_MIN:
                     self._zoom -= 1
                     self._zoom_rebuild()
                     self._wheel_dbg('back', 'zoom ' + str(self._zoom))
                     return True
             else:
                 dy = getattr(touch, 'scroll_y', 0) or 0
-                if dy > 0 and self._zoom < 18:
+                if dy > 0 and self._zoom < _ZOOM_MAX:
                     self._zoom += 1
                     self._zoom_rebuild()
                     return True
-                elif dy < 0 and self._zoom > 3:
+                elif dy < 0 and self._zoom > _ZOOM_MIN:
                     self._zoom -= 1
                     self._zoom_rebuild()
                     return True
@@ -849,7 +871,7 @@ class MapPage(BoxLayout):
                 pass
 
     def _pan_map(self, dx, dy):
-        """按屏幕位移平移地图中心"""
+        """按屏幕位移平移地图中心（跟手：0.05s 防抖，拖动感觉即时）"""
         try:
             z = self._zoom
             cx_px, cy_px = self._px_center
@@ -859,8 +881,22 @@ class MapPage(BoxLayout):
             lng_gcj = _px_to_lng(new_cx, z)
             lat, lng = self._to_air(lat_gcj, lng_gcj)
             self._center = (lat, lng)
-            # 平移也走 0.15s 防抖重建：拖动中只更新中心，停手后重建一次，
-            # 不再每帧重建 9 格瓦片/每帧发起下载（4G 下卡顿+高失败率根源）
-            self._zoom_rebuild()
+            # 平移独立 0.05s 防抖重建（PAN_DEBOUNCE）：拖动中只更新中心，
+            # 停手后重建一次；比缩放(0.08s)更跟手，又不每帧重建 9 格瓦片
+            self._pan_debounce_rebuild()
+        except Exception:
+            pass
+
+    def _pan_debounce_rebuild(self):
+        """平移防抖：0.05s 内连续拖动只重建一次（跟手且不卡）"""
+        if self._pan_dt_uid:
+            Clock.unschedule(self._pan_dt_uid)
+        self._pan_dt_uid = Clock.schedule_once(
+            lambda dt: self._pan_rebuild_now(), _PAN_DEBOUNCE)
+
+    def _pan_rebuild_now(self):
+        self._pan_dt_uid = None
+        try:
+            self._rebuild()
         except Exception:
             pass

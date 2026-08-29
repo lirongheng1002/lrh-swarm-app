@@ -1804,6 +1804,19 @@ class SwarmMobileApp(App):
             self._log_text = '\n'.join(lines)
         if hasattr(self, '_lbl_log'):
             self._lbl_log.text = self._log_text
+        # ---- 操作使用记录：同步落盘（领导要求记录操作手机的使用记录）----
+        # 每次操作以「时间 + 内容」追加到 用户数据目录/操作记录_<日期>.log，
+        # 与 UI 日志区一致；写盘失败绝不打断界面/主流程。
+        try:
+            import time as _t
+            _day = _t.strftime('%Y%m%d')
+            _ts = _t.strftime('%H:%M:%S')
+            _dir = App.get_running_app().user_data_dir
+            _p = os.path.join(_dir, '操作记录_%s.log' % _day)
+            with open(_p, 'a', encoding='utf-8') as _f:
+                _f.write('[%s] %s\n' % (_ts, text))
+        except Exception:
+            pass
 
     def on_stop(self):
         try:
