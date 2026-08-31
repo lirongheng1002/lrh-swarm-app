@@ -580,8 +580,8 @@ class MapPage(BoxLayout):
         self._ky = self.height / 768.0
         self._w0x = (cx + 0.5) * 256.0   # 中心瓦片几何中心（世界px）
         self._w0y = (cy + 0.5) * 256.0
-        self._gx = self._grid.center_x if self._grid else self.center_x
-        self._gy = self._grid.center_y if self._grid else self.center_y
+        # 注意：grid 刚 add_widget 尚未布局，center 不可靠；标记/取点统一用
+        # MapPage 自身中心 self.center（grid 铺满 MapPage，中心即屏中心）
 
         if self._grid is not None:
             self.remove_widget(self._grid)
@@ -618,12 +618,9 @@ class MapPage(BoxLayout):
         w0y = getattr(self, '_w0y', None)
         if w0x is None:
             w0x, w0y = self._w0x, self._w0y
-        gx = getattr(self, '_gx', None)
-        gy = getattr(self, '_gy', None)
-        if gx is None:
-            g = self._grid
-            gx = g.center_x if g else self.center_x
-            gy = g.center_y if g else self.center_y
+        # grid 铺满 MapPage，用 MapPage 自身中心（布局稳定，缩放重建后不漂）
+        gx = self.center_x
+        gy = self.center_y
         return gx + (px_x - w0x) * kx, gy - (px_y - w0y) * ky
 
     def _s2w(self, sx, sy):
@@ -634,12 +631,8 @@ class MapPage(BoxLayout):
         w0y = getattr(self, '_w0y', None)
         if w0x is None:
             w0x, w0y = self._w0x, self._w0y
-        gx = getattr(self, '_gx', None)
-        gy = getattr(self, '_gy', None)
-        if gx is None:
-            g = self._grid
-            gx = g.center_x if g else self.center_x
-            gy = g.center_y if g else self.center_y
+        gx = self.center_x
+        gy = self.center_y
         return w0x + (sx - gx) / kx, w0y - (sy - gy) / ky
 
     def _tap_lat_lng(self, pos):
