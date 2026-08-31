@@ -1424,14 +1424,20 @@ class SwarmMobileApp(App):
                 holder.remove_widget(layer)
         except Exception:
             pass
-        # ② 铺到 root 顶层整窗覆盖——全屏只留：坐标输入行 + 任务表 + 整窗地图
-        #    （顶部连接/状态/卫星栏、导航栏全部不显示；领导 2026-08-31 要求）
+        # ② 铺到 root 顶层整窗覆盖——全屏 = 上：全部地图（占满剩余），下：坐标栏+任务表
+        #    （顶部连接/状态/卫星栏、导航栏全屏时隐藏；领导 2026-08-31 明确要求）
         full = FloatLayout()
-        # 底部固定操作区：目标机/纬度/经度/高度 坐标行 + 任务表（序号/位置/高度，双击可编辑）
+        main_box = BoxLayout(orientation='vertical', spacing=0, padding=0)
+        # 地图区（上半：size_hint_y=1 占满全部剩余高度；地图在下、航线层在上）
+        map_area = FloatLayout(size_hint_y=1)
+        mp.size_hint = (1, 1)
+        layer.size_hint = (1, 1)
+        map_area.add_widget(mp)
+        map_area.add_widget(layer)
+        main_box.add_widget(map_area)
+        # 下半固定区：坐标输入行 + 任务表（同一实例，摘出即同步，退出还原）
         bottom_bar = BoxLayout(orientation='vertical', spacing=1,
-                               size_hint=None, width=1, height='142dp',
-                               pos_hint={'x': 0, 'y': 0})
-        # 坐标输入行（同一 self._wp_row 实例，摘出即同步，退出还原）
+                               size_hint_y=None, height='142dp')
         wp_row = getattr(self, '_wp_row', None)
         if wp_row is not None:
             try:
@@ -1439,7 +1445,6 @@ class SwarmMobileApp(App):
             except Exception:
                 pass
             bottom_bar.add_widget(wp_row)
-        # 任务表（同一 self._mission_scroll 实例，双击编辑行为不变）
         msc = getattr(self, '_mission_scroll', None)
         if msc is not None:
             try:
@@ -1447,25 +1452,21 @@ class SwarmMobileApp(App):
             except Exception:
                 pass
             bottom_bar.add_widget(msc)
-        full.add_widget(bottom_bar)
-        # 地图整窗铺满（坐标/任务表叠在底部上方）
-        mp.size_hint = (1, 1)
-        layer.size_hint = (1, 1)
-        full.add_widget(mp)
-        full.add_widget(layer)
-        # ③ 左上角「退出全屏」返回条（半透明深底圆角）
+        main_box.add_widget(bottom_bar)
+        full.add_widget(main_box)
+        # ③ 左上角「退出全屏」返回条（浮在地图区左上，半透明深底圆角）
         b_exit = RoundedButton(text='← 退出全屏', font_size='14sp',
                                background_color=(0.12, 0.16, 0.2, 0.85),
                                radius='8dp')
         b_exit.size_hint = (None, None)
-        b_exit.size = ('92dp', '34dp')
-        b_exit.pos = (6, 6)
+        b_exit.size = ('100dp', '36dp')
+        b_exit.pos_hint = {'top': 1, 'x': 0.02}
         b_exit.bind(on_release=lambda _x: self._exit_full_map())
         full.add_widget(b_exit)
         self.root.add_widget(full)
         self._map_full_layer = full
         self._map_full_on = True
-        self._append_log('全屏地图：主界面地图已整窗铺满（同一实例，同步）—— 点「← 退出全屏」还原')
+        self._append_log('全屏地图：上=全部地图，下=坐标栏+任务表 —— 点「← 退出全屏」还原')
 
     def _exit_full_map(self):
         """还原：把地图与航线层放回任务航线页的小屏容器"""
@@ -1513,6 +1514,12 @@ class SwarmMobileApp(App):
         self._map_full_on = False
         self._map_full_layer = None
         self._append_log('已退出全屏，地图还原到任务航线页小屏')
+        # 还原后强制重建地图瓦片（grid 摘出/放回后尺寸时序可能跳过重建 → 黑屏）
+        try:
+            from kivy.clock import Clock as _CK
+            _CK.schedule_once(lambda _dt: self._map_page._rebuild(), 0.1)
+        except Exception:
+            pass
 
     def _on_map_pick(self, lat, lng):
         self._wp_lat.text = '%.6f' % lat
