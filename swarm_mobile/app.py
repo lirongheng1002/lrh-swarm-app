@@ -1511,28 +1511,17 @@ class SwarmMobileApp(App):
         map_area.add_widget(mp)
         map_area.add_widget(layer)
         main_box.add_widget(map_area)
-        # 下半固定区（从上到下）：任务表(航点状态栏) → 坐标栏 → 最底功能按钮横铺一行
-        #   （领导 2026-09-02：最底=地图/坐标换算/添加航点/上传任务/读取航线/定位飞机/功能导航 7键一行；
-        #    2026-09-02 放宽地图=底部压矮到约150dp，任务表70+坐标栏40+按钮行40）
+        # 下半固定区只两行（领导 2026-09-02 定稿）：坐标状态栏(上，双击切目标机) + 最底功能按钮横铺一行。
+        #   任务表不进全屏（留在主界面任务航线页原位；领导：不要那一堆编辑框/重叠）
         bottom_bar = BoxLayout(orientation='vertical', spacing=1,
-                               size_hint_y=None, height='152dp')
+                               size_hint_y=None, height='82dp')
         wp_row = getattr(self, '_wp_row', None)
         if wp_row is not None:
             try:
                 wp_row.parent.remove_widget(wp_row)
             except Exception:
                 pass
-        msc = getattr(self, '_mission_scroll', None)
-        if msc is not None:
-            try:
-                msc.parent.remove_widget(msc)
-            except Exception:
-                pass
-            msc.size_hint_y = None
-            msc.height = '70dp'                  # 全屏时任务表压矮，地图放宽
-            bottom_bar.add_widget(msc)          # 上：任务表（航点状态）
-        if wp_row is not None:
-            bottom_bar.add_widget(wp_row)       # 中：坐标状态栏（双击切目标机）
+            bottom_bar.add_widget(wp_row)       # 上：坐标状态栏（双击切目标机）
         # 最底：功能按钮 7 键一行横铺
         act = BoxLayout(orientation='horizontal', spacing=2,
                         size_hint_y=None, height='40dp')
@@ -1617,15 +1606,18 @@ class SwarmMobileApp(App):
         except Exception:
             pass
         # 还原任务表到 body2（map_holder 之后）
+        # ——仅当全屏确实摘走过才还原；现在全屏不摘任务表，主界面任务表原位不动
         try:
             msc = getattr(self, '_mission_scroll', None)
-            if msc is not None and msc.parent:
-                msc.parent.remove_widget(msc)
             if msc is not None:
-                msc.height = '98dp'              # 还原主界面任务表高度
-            if msc is not None and hasattr(self, '_pages') and len(self._pages) > 2:
-                body2 = self._pages[2]
-                body2.add_widget(msc, index=1)
+                body2 = self._pages[2] if hasattr(self, '_pages') and len(self._pages) > 2 else None
+                in_place = body2 is not None and msc in body2.children
+                if not in_place:
+                    if msc.parent:
+                        msc.parent.remove_widget(msc)
+                    msc.height = '98dp'
+                    if body2 is not None:
+                        body2.add_widget(msc, index=1)
         except Exception:
             pass
         self._map_full_on = False
