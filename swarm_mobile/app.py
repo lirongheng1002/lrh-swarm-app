@@ -1401,20 +1401,32 @@ class SwarmMobileApp(App):
             self._append_log('起飞失败：%s' % e)
 
     def _on_open_map(self):
-        """打开高德卫星地图：以首架在线机（或默认）为中心，点击取点"""
-        center = (34.26, 108.94)
-        for s in sorted(self.fleet.fleet):
-            v = self.fleet.fleet[s]
-            lat = getattr(v, 'lat', None)
-            lon = getattr(v, 'lon', None)
-            if v.online and lat and lon and lat != 0:
-                center = (lat, lon)
-                break
+        """打开高德卫星地图：继承主地图当前中心+缩放+校准（两图同步），点击取点"""
+        mp = self._map_page
+        center = (mp._center if mp else (34.26, 108.94))
+        zoom = int(getattr(mp, '_zoom', 15) or 15)
+        calib = getattr(mp, '_calib', None)
+        gps_gcj = getattr(mp, 'gps_is_gcj', False)
+        full = mapview.MapPage(center=center, zoom=zoom,
+                               on_pick=self._on_map_pick,
+                               on_close=lambda: self._map_popup.dismiss(),
+                               gps_is_gcj=gps_gcj)
+        if calib:
+            full.set_calib(calib, note=getattr(mp, '_calib_from', ''))
+        # 同步主地图的航点/飞机标记层（独立实例上叠加，打开即一致）
+        try:
+            layer = mapview._RouteLayer(full)
+            layer.size_hint = (1, 1)
+            if hasattr(self, '_map_route_layer'):
+                layer.set_route(self._map_route_layer._route)
+                layer.set_aircraft(self._map_route_layer._planes)
+            full.add_widget(layer)
+            self._full_layer = layer
+        except Exception:
+            pass
         self._map_popup = Popup(
             title='高德卫星地图 —— 点击任一点设为航点',
-            content=mapview.MapPage(center=center, zoom=15,
-                                    on_pick=self._on_map_pick,
-                                    on_close=lambda: self._map_popup.dismiss()),
+            content=full,
             size_hint=(0.98, 0.98))
         self._map_popup.open()
 
