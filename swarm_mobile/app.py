@@ -1562,6 +1562,13 @@ class SwarmMobileApp(App):
         self._map_full_layer = full
         self._map_full_on = True
         self._append_log('全屏地图：上=全部地图，下=坐标栏+任务表 —— 点「← 退出全屏」还原')
+        # 进入全屏后强制重建瓦片网格（等横屏尺寸定稿再重建——
+        # 否则地图仍是竖屏小屏的旧瓦片画面；领导 2026-09-02 反馈）
+        try:
+            from kivy.clock import Clock as _CK
+            _CK.schedule_once(lambda _dt: self._map_page._rebuild(), 0.15)
+        except Exception:
+            pass
 
     def _exit_full_map(self):
         """还原：把地图与航线层放回任务航线页的小屏容器"""
