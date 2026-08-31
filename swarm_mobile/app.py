@@ -352,7 +352,8 @@ class SwarmMobileApp(App):
         self._mission_box.bind(minimum_height=self._mission_box.setter('height'))
         self._mission_scroll.add_widget(self._mission_box)
         body2.add_widget(self._mission_scroll)
-        bottom = BoxLayout(orientation='vertical', spacing=1, size_hint_y=None, height='132dp')
+        self._mission_bottom = BoxLayout(orientation='vertical', spacing=1, size_hint_y=None, height='132dp')
+        bottom = self._mission_bottom
         bottom.add_widget(self._build_mission())
         body2.add_widget(bottom)
 
@@ -766,7 +767,8 @@ class SwarmMobileApp(App):
         b = BoxLayout(orientation='vertical', spacing=4, size_hint_y=1,
                       padding=(8, 2))
         # 目标机行：航点/任务都发给这架（领导：加航点必须明确是几号机）
-        rt = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
+        self._wp_row = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
+        rt = self._wp_row
         self._sp_tgt = RoundedButton(text='1号机', font_size='15sp', size_hint_x=0.25,
                                       size_hint_y=None, height='40dp',
                                       background_color=(0.18, 0.35, 0.55, 1),
@@ -1422,8 +1424,31 @@ class SwarmMobileApp(App):
                 holder.remove_widget(layer)
         except Exception:
             pass
-        # ② 铺到 root 顶层整窗覆盖（FloatLayout 全屏，地图先加、航线层在上）
+        # ② 铺到 root 顶层整窗覆盖——全屏只留：坐标输入行 + 任务表 + 整窗地图
+        #    （顶部连接/状态/卫星栏、导航栏全部不显示；领导 2026-08-31 要求）
         full = FloatLayout()
+        # 底部固定操作区：目标机/纬度/经度/高度 坐标行 + 任务表（序号/位置/高度，双击可编辑）
+        bottom_bar = BoxLayout(orientation='vertical', spacing=1,
+                               size_hint=None, width=1, height='142dp',
+                               pos_hint={'x': 0, 'y': 0})
+        # 坐标输入行（同一 self._wp_row 实例，摘出即同步，退出还原）
+        wp_row = getattr(self, '_wp_row', None)
+        if wp_row is not None:
+            try:
+                wp_row.parent.remove_widget(wp_row)
+            except Exception:
+                pass
+            bottom_bar.add_widget(wp_row)
+        # 任务表（同一 self._mission_scroll 实例，双击编辑行为不变）
+        msc = getattr(self, '_mission_scroll', None)
+        if msc is not None:
+            try:
+                msc.parent.remove_widget(msc)
+            except Exception:
+                pass
+            bottom_bar.add_widget(msc)
+        full.add_widget(bottom_bar)
+        # 地图整窗铺满（坐标/任务表叠在底部上方）
         mp.size_hint = (1, 1)
         layer.size_hint = (1, 1)
         full.add_widget(mp)
@@ -1464,6 +1489,25 @@ class SwarmMobileApp(App):
             layer.size_hint = (1, 1)
             holder.add_widget(mp)
             holder.add_widget(layer)
+        except Exception:
+            pass
+        # 还原坐标行到任务航线页 bottom 最前（rt 原本在 r3/r1 之前）
+        try:
+            wp_row = getattr(self, '_wp_row', None)
+            if wp_row is not None and wp_row.parent:
+                wp_row.parent.remove_widget(wp_row)
+            if wp_row is not None and hasattr(self, '_mission_bottom'):
+                self._mission_bottom.add_widget(wp_row, index=0)
+        except Exception:
+            pass
+        # 还原任务表到 body2（map_holder 之后）
+        try:
+            msc = getattr(self, '_mission_scroll', None)
+            if msc is not None and msc.parent:
+                msc.parent.remove_widget(msc)
+            if msc is not None and hasattr(self, '_pages') and len(self._pages) > 2:
+                body2 = self._pages[2]
+                body2.add_widget(msc, index=1)
         except Exception:
             pass
         self._map_full_on = False
