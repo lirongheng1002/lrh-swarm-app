@@ -771,6 +771,7 @@ class SwarmMobileApp(App):
         """任务航线页控件区：输入框紧凑，按钮圆润，功能分区。"""
         b = BoxLayout(orientation='vertical', spacing=4, size_hint_y=1,
                       padding=(8, 2))
+        self._mission_rows = b   # 三行容器 B = [坐标行, 全屏地图行, 上传行]（还原时坐标行必须回这里）
         # 目标机行：航点/任务都发给这架（领导：加航点必须明确是几号机）
         self._wp_row = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
         rt = self._wp_row
@@ -805,6 +806,7 @@ class SwarmMobileApp(App):
         # 功能按钮 4 等份：全屏地图/坐标换算/添加航点/添加投弹 一行平铺
         r3 = GridLayout(cols=4, spacing=4, size_hint_y=None, height='40dp',
                         padding=(0, 0))
+        self._mission_btn_r3 = r3   # 全屏地图/坐标换算/添加航点/功能导航 行
         r3.add_widget(self._mk_btn('全屏地图', (0.15, 0.6, 0.35, 1),
                                    self._on_open_map, font_size='14sp',
                                    height='40dp'))
@@ -820,6 +822,7 @@ class SwarmMobileApp(App):
         # 最底行：上传任务 / 读取航线 / 定位飞机 / 清除任务（4 个平铺）
         r1 = BoxLayout(orientation='horizontal', spacing=5,
                        size_hint_y=None, height='40dp')
+        self._mission_btn_r1 = r1   # 上传任务/读取航线/定位飞机/清除任务 行
         r1.add_widget(self._mk_btn('上传任务', ACCENT, lambda: self._confirm(
             '上传任务', '把当前任务（%d 条）写入 %s？' % (self._mission_len(), self._sel_name()),
             self._on_upload_mission), size_hint_x=0.25, font_size='13sp', height='40dp'))
@@ -1498,13 +1501,26 @@ class SwarmMobileApp(App):
             holder.add_widget(layer)
         except Exception:
             pass
-        # 还原坐标行到任务航线页 bottom 最前（rt 原本在 r3/r1 之前）
+        # 还原坐标行到三行容器 B 的头部（rt 原本在 r3/r1 之前：
+        # B = [坐标行, 全屏地图行, 上传行] 1-2-3；Kivy add index=0 是追加末尾，
+        # 直接 append 会变成 [r3, r1, rt] = 231 —— 所以显式重排）
         try:
             wp_row = getattr(self, '_wp_row', None)
+            rows = getattr(self, '_mission_rows', None)
+            r3b = getattr(self, '_mission_btn_r3', None)
+            r1b = getattr(self, '_mission_btn_r1', None)
             if wp_row is not None and wp_row.parent:
                 wp_row.parent.remove_widget(wp_row)
-            if wp_row is not None and hasattr(self, '_mission_bottom'):
-                self._mission_bottom.add_widget(wp_row, index=0)
+            if rows is not None:
+                # 取出 B 里剩余按钮行，按 1-2-3 顺序重放
+                for w in (r3b, r1b):
+                    if w is not None and w.parent:
+                        w.parent.remove_widget(w)
+                rows.add_widget(wp_row)  # 1 坐标行
+                if r3b is not None:
+                    rows.add_widget(r3b)  # 2 全屏地图行
+                if r1b is not None:
+                    rows.add_widget(r1b)  # 3 上传行
         except Exception:
             pass
         # 还原任务表到 body2（map_holder 之后）
