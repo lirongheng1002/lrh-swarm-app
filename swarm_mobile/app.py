@@ -1520,10 +1520,22 @@ class SwarmMobileApp(App):
         map_area.add_widget(mp)
         map_area.add_widget(layer)
         main_box.add_widget(map_area)
-        # 下半固定区只两行（领导 2026-09-02 定稿）：坐标状态栏(上，双击切目标机) + 最底功能按钮横铺一行。
-        #   任务表/主界面输入框都不进全屏（留在主界面原位；领导：不要那一堆编辑框/重叠）
+        # 下半固定区三行（领导 2026-09-02 定稿，横屏从上往下）：
+        #   ① 航点状态显示（最多 3 个航点）→ ② 坐标状态栏（几号机/纬度/经度/高度，双击切目标机）→
+        #   ③ 最底功能按钮横铺一行。任务表/主界面输入框不进全屏（留在主界面原位）。顶部卫星/状态固定栏全屏不要。
         bottom_bar = BoxLayout(orientation='vertical', spacing=1,
-                               size_hint_y=None, height='82dp')
+                               size_hint_y=None, height='128dp')
+        # ① 上：航点状态显示（最多 3 个航点，纯显示无编辑框；领导：能显示三个航点就够了）
+        wpstat = BoxLayout(orientation='vertical', spacing=1, size_hint_y=None, height='46dp')
+        _wp_lbls = []
+        for _wi in range(3):
+            _wl = Label(text='#%d 航点 --' % _wi, font_size='13sp',
+                        color=(0.85, 0.85, 0.8, 1), halign='left', valign='middle',
+                        text_size=(None, None))
+            _wp_lbls.append(_wl)
+            wpstat.add_widget(_wl)
+        bottom_bar.add_widget(wpstat)           # ① 上：航点状态显示
+        self._full_wp_lbls = _wp_lbls
         # 上：坐标状态栏——纯显示（目标机/纬度/经度/高度），双击=切换目标机，无输入框
         stat = BoxLayout(orientation='horizontal', spacing=4, size_hint_y=None, height='40dp')
         lbl_tgt = Label(text=self._sp_tgt.text, font_size='16sp', bold=True,
@@ -1654,17 +1666,45 @@ class SwarmMobileApp(App):
         except Exception:
             pass
 
+    def _cmd_zh(self, cmd):
+        """指令码 → 中文名（与任务表显示同源 vehicles.MAV_CMD_ZH）"""
+        try:
+            return vehicles.MAV_CMD_ZH.get(cmd, 'M%d' % cmd)
+        except Exception:
+            return 'M%d' % cmd
+
     def _refresh_full_stat(self):
-        """全屏坐标状态栏刷为当前目标机（_tick 每 0.5s 调）"""
+        """全屏底部三行刷为当前目标机（_tick 每 0.5s 调）：
+        ① 航点状态显示（最多3个航点）② 坐标状态栏（几号机/纬度/经度/高度）"""
         if not getattr(self, '_map_full_on', False):
             return
+        sid = self._mission_sysid()
+        v = self.fleet.vehicle(sid) if hasattr(self.fleet, 'vehicle') else None
+        # ① 航点状态显示（目标机任务前3个航点）
+        w_lbls = getattr(self, '_full_wp_lbls', None)
+        if w_lbls:
+            wps = getattr(v, 'mission', None) if v is not None else None
+            if not wps:
+                wps = []
+            for _i, _wl in enumerate(w_lbls):
+                if _i < len(wps):
+                    it = wps[_i]
+                    _cmd = self._cmd_zh(it.get('cmd')) if hasattr(self, '_cmd_zh') else 'M%d' % it.get('cmd', 0)
+                    _la = it.get('lat', 0) or 0
+                    _lo = it.get('lon', 0) or 0
+                    _al = it.get('alt', 0) or 0
+                    if _la and _lo and abs(_la) > 1:
+                        _wl.text = '#%d %s %.6f, %.6f %sm' % (_i, _cmd, _la, _lo, _al)
+                    else:
+                        _wl.text = '#%d %s --' % (_i, _cmd)
+                else:
+                    _wl.text = '#%d --' % _i
+        # ② 坐标状态栏（几号机/纬度/经度/高度）
         lbls = getattr(self, '_full_stat_lbls', None)
         if not lbls:
             return
         tgt_l, lat_l, lon_l, alt_l = lbls
         tgt_l.text = getattr(self, '_sp_tgt', None).text if getattr(self, '_sp_tgt', None) else '--'
-        sid = self._mission_sysid()
-        v = self.fleet.vehicle(sid) if hasattr(self.fleet, 'vehicle') else None
         if v is not None and getattr(v, 'lat', None) and abs(v.lat) > 1:
             lat_l.text = '纬度 %.6f' % v.lat
             lon_l.text = '经度 %.6f' % v.lon
