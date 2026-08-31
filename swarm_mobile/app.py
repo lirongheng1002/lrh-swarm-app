@@ -1499,8 +1499,17 @@ class SwarmMobileApp(App):
         # ② 铺到 root 顶层整窗覆盖——全屏 = 上：全部地图（占满剩余），下：坐标栏+任务表
         #    （顶部连接/状态/卫星栏、导航栏全屏时隐藏；领导 2026-08-31 明确要求）
         full = FloatLayout()
-        # 不透明白底垫底（先加=最下）：全屏时任何盖不住的边缘也不露主界面顶部栏
-        _bg = Label(text='', size_hint=(1, 1), color=(0.08, 0.1, 0.12, 1))
+        # 真正不透明背景垫底（full.canvas.before 画深色矩形）：
+        # 之前的 Label 垫底是透明的（Label 默认不画背景），导致主界面底部任务表/输入框/按钮行
+        # 透过全屏层显示出来与状态栏、功能行重叠（领导 2026-09-02 截图确认"字重叠"）。
+        from kivy.graphics import Color as _BKCol, Rectangle as _BKRct
+        with full.canvas.before:
+            _BKCol(0.07, 0.09, 0.11, 1)
+            self._full_bg_rect = _BKRct(size=full.size)
+        full.bind(size=lambda _w, _v: setattr(self._full_bg_rect, 'size', _v),
+                  pos=lambda _w, _v: setattr(self._full_bg_rect, 'pos', _v))
+        # Label 垫底（透明、不消费触摸，仅占位防误触）——真正盖住靠上面的背景矩形
+        _bg = Label(text='', size_hint=(1, 1), color=(0.07, 0.09, 0.11, 1))
         full.add_widget(_bg)
         main_box = BoxLayout(orientation='vertical', spacing=0, padding=0)
         # 地图区（上半：size_hint_y=1 占满全部剩余高度；地图在下、航线层在上）
