@@ -775,6 +775,17 @@ class SwarmMobileApp(App):
         # 目标机行：航点/任务都发给这架（领导：加航点必须明确是几号机）
         self._wp_row = BoxLayout(orientation='horizontal', spacing=5, size_hint_y=None, height='40dp')
         rt = self._wp_row
+        # 坐标状态栏双击 = 切换目标机（领导 2026-09-02 要求）
+        # 必须先用 collide_point 判定触摸落在坐标栏区域内，否则双击任务表行时
+        # 会误弹选机并吞掉触摸（Kivy is_double_tap 是全局连击标志）
+        def _dbl_tgt(inst, touch):
+            if not rt.collide_point(*touch.pos):
+                return False
+            if getattr(touch, 'is_double_tap', False):
+                self._pick_aircraft()
+                return True
+            return False
+        rt.bind(on_touch_down=_dbl_tgt)
         self._sp_tgt = RoundedButton(text='1号机', font_size='15sp', size_hint_x=0.25,
                                       size_hint_y=None, height='40dp',
                                       background_color=(0.18, 0.35, 0.55, 1),
@@ -990,9 +1001,9 @@ class SwarmMobileApp(App):
         box = BoxLayout(orientation='vertical', spacing=6, padding=12)
         mk = lambda t, c, cb: self._mk_btn(t, c, cb, size_hint_y=None, height='46dp', font_size='15sp')
         box.add_widget(mk('起飞 Takeoff（%sm）' % self._tof_alt(), OK,
-                          lambda: self._takeoff_double_tap(sid, popup)))
-        box.add_widget(mk('投弹任务（184）', DANGER, lambda: self._bomb_double_tap(sid, popup)))
-        box.add_widget(mk('返航 RTL', ACCENT, lambda: self._rtl_double_tap(sid, popup)))
+                          lambda: self._wp_cmd_takeoff(sid, seq, popup)))
+        box.add_widget(mk('投弹任务（184）', DANGER, lambda: self._wp_cmd_bomb(sid, seq, popup)))
+        box.add_widget(mk('返航 RTL', ACCENT, lambda: self._wp_cmd_rtl(sid, seq, popup)))
         kind = v.mission[seq].get('kind')
         ktxt = '集合点' if kind == 'collect' else ('离散点' if kind == 'disperse' else '普通')
         box.add_widget(mk('设为集合点（当前:%s）' % ktxt, ACCENT,
@@ -1002,6 +1013,59 @@ class SwarmMobileApp(App):
         box.add_widget(mk('清除任务', GRAY, lambda: self._clear_double_tap(sid, popup)))
         popup.content = box
         Clock.schedule_once(lambda *a: popup.open(), 0.05)
+
+    def _wp_cmd_takeoff(self, sid, seq, popup):
+        """双击指令框选「起飞」：把该航点指令写为起飞(22)，输入起飞高度"""
+        popup.dismiss()
+        v = self.fleet.vehicle(sid)
+        if not v or not v.mission or seq >= len(v.mission):
+            self._append_log('指令修改失败：任务为空')
+            return
+        self._input_dialog('起飞指令 · #%s' % seq, '起飞高度(m)',
+                           lambda val: self._wp_cmd_takeoff_apply(sid, seq, val),
+                           default=str(self._tof_alt()))
+
+    def _wp_cmd_takeoff_apply(self, sid, seq, alt_s):
+        v = self.fleet.vehicle(sid)
+        if not v or not v.mission or seq >= len(v.mission):
+            self._append_log('指令修改失败：任务为空')
+            return
+        try:
+            alt = float(alt_s) if alt_s.strip() else float(self._tof_alt())
+        except Exception:
+            alt = float(self._tof_alt())
+        it = v.mission[seq]
+        it['cmd'] = 22
+        it['param1'] = alt
+        it['alt'] = alt
+        self._refresh_mission_table()
+        self._append_log('%s号机 #%s 指令=起飞 %sm（上传任务后生效）' % (sid, seq, alt))
+
+    def _wp_cmd_rtl(self, sid, seq, popup):
+        """双击指令框选「返航」：把该航点指令写为返航(20)"""
+        popup.dismiss()
+        v = self.fleet.vehicle(sid)
+        if not v or not v.mission or seq >= len(v.mission):
+            self._append_log('指令修改失败：任务为空')
+            return
+        it = v.mission[seq]
+        it['cmd'] = 20
+        it['param1'] = 0
+        self._refresh_mission_table()
+        self._append_log('%s号机 #%s 指令=返航 RTL（上传任务后生效）' % (sid, seq))
+
+    def _wp_cmd_bomb(self, sid, seq, popup):
+        """双击指令框选「投弹」：把该航点指令写为投弹(184)，沿用舵机PWM配置"""
+        popup.dismiss()
+        v = self.fleet.vehicle(sid)
+        if not v or not v.mission or seq >= len(v.mission):
+            self._append_log('指令修改失败：任务为空')
+            return
+        it = v.mission[seq]
+        it['cmd'] = 184
+        it['param1'] = 0
+        self._refresh_mission_table()
+        self._append_log('%s号机 #%s 指令=投弹(舵机)（上传任务后生效）' % (sid, seq))
 
     def _edit_wp_alt(self, seq):
         sid = self._mission_sysid()
@@ -1435,6 +1499,9 @@ class SwarmMobileApp(App):
         # ② 铺到 root 顶层整窗覆盖——全屏 = 上：全部地图（占满剩余），下：坐标栏+任务表
         #    （顶部连接/状态/卫星栏、导航栏全屏时隐藏；领导 2026-08-31 明确要求）
         full = FloatLayout()
+        # 不透明白底垫底（先加=最下）：全屏时任何盖不住的边缘也不露主界面顶部栏
+        _bg = Label(text='', size_hint=(1, 1), color=(0.08, 0.1, 0.12, 1))
+        full.add_widget(_bg)
         main_box = BoxLayout(orientation='vertical', spacing=0, padding=0)
         # 地图区（上半：size_hint_y=1 占满全部剩余高度；地图在下、航线层在上）
         # RelativeLayout 包裹 —— 铁律：MapPage 用 FloatLayout 瓦片会渲染错位/黑屏
@@ -1444,23 +1511,42 @@ class SwarmMobileApp(App):
         map_area.add_widget(mp)
         map_area.add_widget(layer)
         main_box.add_widget(map_area)
-        # 下半固定区：坐标输入行 + 任务表（同一实例，摘出即同步，退出还原）
+        # 下半固定区（从上到下）：任务表(航点状态栏) → 坐标栏 → 最底功能按钮横铺一行
+        #   （领导 2026-09-02：最底=地图/坐标换算/添加航点/上传任务/读取航线/定位飞机/功能导航 7键一行；
+        #    2026-09-02 放宽地图=底部压矮到约150dp，任务表70+坐标栏40+按钮行40）
         bottom_bar = BoxLayout(orientation='vertical', spacing=1,
-                               size_hint_y=None, height='142dp')
+                               size_hint_y=None, height='152dp')
         wp_row = getattr(self, '_wp_row', None)
         if wp_row is not None:
             try:
                 wp_row.parent.remove_widget(wp_row)
             except Exception:
                 pass
-            bottom_bar.add_widget(wp_row)
         msc = getattr(self, '_mission_scroll', None)
         if msc is not None:
             try:
                 msc.parent.remove_widget(msc)
             except Exception:
                 pass
-            bottom_bar.add_widget(msc)
+            msc.size_hint_y = None
+            msc.height = '70dp'                  # 全屏时任务表压矮，地图放宽
+            bottom_bar.add_widget(msc)          # 上：任务表（航点状态）
+        if wp_row is not None:
+            bottom_bar.add_widget(wp_row)       # 中：坐标状态栏（双击切目标机）
+        # 最底：功能按钮 7 键一行横铺
+        act = BoxLayout(orientation='horizontal', spacing=2,
+                        size_hint_y=None, height='40dp')
+        mk = lambda t, c, cb: self._mk_btn(t, c, cb, size_hint_x=1, font_size='12sp', height='40dp')
+        act.add_widget(mk('全屏地图', (0.15, 0.6, 0.35, 1), self._on_open_map))
+        act.add_widget(mk('坐标换算', (0.55, 0.4, 0.2, 1), self._on_open_coord))
+        act.add_widget(mk('添加航点', ACCENT, self._on_add_wp))
+        act.add_widget(mk('上传任务', ACCENT, lambda *a: self._confirm(
+            '上传任务', '把当前任务（%d 条）写入 %s？' % (self._mission_len(), self._sel_name()),
+            self._on_upload_mission)))
+        act.add_widget(mk('读取航线', ACCENT, self._on_read_route))
+        act.add_widget(mk('定位飞机', ACCENT, self._on_locate_vehicle))
+        act.add_widget(mk('功能导航', DANGER, self._open_function_nav))
+        bottom_bar.add_widget(act)              # 最底：按钮行
         main_box.add_widget(bottom_bar)
         full.add_widget(main_box)
         # ③ 左上角「退出全屏」返回条（浮在地图区左上，半透明深底圆角）
@@ -1528,6 +1614,8 @@ class SwarmMobileApp(App):
             msc = getattr(self, '_mission_scroll', None)
             if msc is not None and msc.parent:
                 msc.parent.remove_widget(msc)
+            if msc is not None:
+                msc.height = '98dp'              # 还原主界面任务表高度
             if msc is not None and hasattr(self, '_pages') and len(self._pages) > 2:
                 body2 = self._pages[2]
                 body2.add_widget(msc, index=1)
