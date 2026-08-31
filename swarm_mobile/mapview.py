@@ -307,8 +307,7 @@ class _RouteLayer(Widget):
                 lat_gcj, lng_gcj = self._map._to_disp(lat, lon)
                 px_x = _lng_to_px(lng_gcj, z)
                 px_y = _lat_to_px(lat_gcj, z)
-                sx = gx + (px_x - cx_px)
-                sy = gy - (px_y - cy_px)
+                sx, sy = m._w2s(px_x, px_y)
                 pts.append((sx, sy))
             except Exception:
                 pass
@@ -327,8 +326,7 @@ class _RouteLayer(Widget):
                     lat_gcj, lng_gcj = self._map._to_disp(lat, lon)
                     px_x = _lng_to_px(lng_gcj, z)
                     px_y = _lat_to_px(lat_gcj, z)
-                    sx = gx + (px_x - cx_px)
-                    sy = gy - (px_y - cy_px)
+                    sx, sy = m._w2s(px_x, px_y)
                     if -20 <= sx <= W + 20 and -20 <= sy <= H + 20:
                         if satellites is not None and satellites >= 8:
                             Color(0.1, 0.6, 1, 1)
@@ -359,8 +357,7 @@ class _RouteLayer(Widget):
                 lat_gcj, lng_gcj = self._map._to_disp(lat, lon)
                 px_x = _lng_to_px(lng_gcj, z)
                 px_y = _lat_to_px(lat_gcj, z)
-                sx = gx + (px_x - cx_px)
-                sy = gy - (px_y - cy_px)
+                sx, sy = m._w2s(px_x, px_y)
                 col = (0.1, 0.6, 1, 1) if (satellites is not None and satellites >= 8) else (0.55, 0.55, 0.55, 1)
                 lbl = Label(text=str(sysid), font_size='16sp', bold=True,
                             color=(1, 0.18, 0.18, 1), size_hint=(None, None),
@@ -576,6 +573,15 @@ class MapPage(BoxLayout):
         self._off = (off_x, off_y)
         self._left_tx = cx - 1          # 3x3 网格左下瓦片号（点击反算基准）
         self._bottom_ty = cy + 1
+        # 世界px -> 屏幕px 显示系数：每瓦片 256 世界px 拉伸铺到 1/3 屏
+        # (keep_ratio=False, allow_stretch=True)；任何缩放下同一地物应落在
+        # 同一屏幕位置，标记绘制必须用这两系数 + 中心瓦片几何中心基准
+        self._kx = self.width / 768.0
+        self._ky = self.height / 768.0
+        self._w0x = (cx + 0.5) * 256.0   # 中心瓦片几何中心（世界px）
+        self._w0y = (cy + 0.5) * 256.0
+        self._gx = self._grid.center_x if self._grid else self.center_x
+        self._gy = self._grid.center_y if self._grid else self.center_y
 
         if self._grid is not None:
             self.remove_widget(self._grid)
@@ -602,15 +608,45 @@ class MapPage(BoxLayout):
         lat, lng = self._tap_lat_lng(pos)
         self._pending_pick = (lat, lng)   # 存待定点，touch_up 延迟加点
 
+    def _w2s(self, px_x, px_y):
+        """世界px(同一缩放级) -> 屏幕坐标：以中心瓦片几何中心为基准 + 显示系数
+        瓦片格拉伸铺到 1/3 屏(keep_ratio=False)，kx=屏宽/768、ky=屏高/768。
+        旧式(px_x-cx_px)未乘系数/错基准 → 缩放时标记相对地物漂移。"""
+        kx = getattr(self, '_kx', self.width / 768.0 if self.width else 1.0)
+        ky = getattr(self, '_ky', self.height / 768.0 if self.height else 1.0)
+        w0x = getattr(self, '_w0x', None)
+        w0y = getattr(self, '_w0y', None)
+        if w0x is None:
+            w0x, w0y = self._w0x, self._w0y
+        gx = getattr(self, '_gx', None)
+        gy = getattr(self, '_gy', None)
+        if gx is None:
+            g = self._grid
+            gx = g.center_x if g else self.center_x
+            gy = g.center_y if g else self.center_y
+        return gx + (px_x - w0x) * kx, gy - (px_y - w0y) * ky
+
+    def _s2w(self, sx, sy):
+        """屏幕坐标 -> 世界px(当前缩放级)：_w2s 的逆"""
+        kx = getattr(self, '_kx', self.width / 768.0 if self.width else 1.0)
+        ky = getattr(self, '_ky', self.height / 768.0 if self.height else 1.0)
+        w0x = getattr(self, '_w0x', None)
+        w0y = getattr(self, '_w0y', None)
+        if w0x is None:
+            w0x, w0y = self._w0x, self._w0y
+        gx = getattr(self, '_gx', None)
+        gy = getattr(self, '_gy', None)
+        if gx is None:
+            g = self._grid
+            gx = g.center_x if g else self.center_x
+            gy = g.center_y if g else self.center_y
+        return w0x + (sx - gx) / kx, w0y - (sy - gy) / ky
+
     def _tap_lat_lng(self, pos):
         """地图内任意屏幕坐标 → WGS84 经纬（双击任务菜单用）"""
         z = self._zoom
-        cx_px, cy_px = self._px_center
-        g = self._grid
-        gx = g.center_x if g else self.center_x
-        gy = g.center_y if g else self.center_y
-        px_x = cx_px + (pos[0] - gx)
-        px_y = cy_px - (pos[1] - gy)
+        # 用统一映射（显示系数+中心瓦片基准）反算，与标记绘制一致，取点不漂移
+        px_x, px_y = self._s2w(pos[0], pos[1])
         return self._to_air(_px_to_lat(px_y, z), _px_to_lng(px_x, z))
 
     # ---------------- 双指捏合缩放 ----------------
@@ -851,8 +887,7 @@ class MapPage(BoxLayout):
                 lat_gcj, lng_gcj = self._to_disp(lat, lon)
                 px_x = _lng_to_px(lng_gcj, z)
                 px_y = _lat_to_px(lat_gcj, z)
-                sx = gx + (px_x - cx_px)
-                sy = gy - (px_y - cy_px)
+                sx, sy = self._w2s(px_x, px_y)
                 d = hypot(sx - pos[0], sy - pos[1])
                 if d < best_d:
                     best_d = d

@@ -191,6 +191,13 @@ class SwarmMobileApp(App):
     title = 'LRH 手机集群控制 v1.0 —— ArduPilot · 4G 云中继'
 
     def build(self):
+        # 电脑调试按 16:9 打开（手机真机不受影响）
+        try:
+            from kivy.utils import platform
+            if platform != 'android':
+                Window.size = (1280, 720)
+        except Exception:
+            pass
         Window.softinput_mode = 'below_target'
         # 统一深色底：按钮圆角外/输入框周边不再是透明区外露（领导：消除透明框）
         Window.clearcolor = (0.08, 0.1, 0.12, 1)
@@ -1826,6 +1833,14 @@ class SwarmMobileApp(App):
 
 
 def main():
+    # 电脑调试窗口按 16:9 比例打开（1280x720；手机真机运行时不影响）
+    try:
+        from kivy.utils import platform
+        if platform != 'android':
+            from kivy.core.window import Window
+            Window.size = (1280, 720)   # Window.size 直接生效（Config.set 对已实例化 Config 无效）
+    except Exception:
+        pass
     SwarmMobileApp().run()
 
 
