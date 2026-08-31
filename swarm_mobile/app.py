@@ -226,6 +226,7 @@ class SwarmMobileApp(App):
         self.fleet.on_mission_uploaded = self._on_mission_uploaded
 
         root = self._build_ui()
+        self.root = root
         Clock.schedule_interval(self._tick, 0.5)
         self._append_log('LRH 手机集群控制 v1.0 就绪 —— 填好服务器地址后点「连接」')
         return root
@@ -328,7 +329,8 @@ class SwarmMobileApp(App):
         # ---- 页③ 任务航线：上面=高德卫星地图（占 65%，重点！地图一定要大），下面=全部功能区贴底（占 35%）----
         body2 = BoxLayout(orientation='vertical', spacing=0, padding=(2, 2))
         # 地图 + 航线覆盖层（RelativeLayout 相对叠加：地图在下、航线在上）
-        map_holder = RelativeLayout(size_hint_y=1)
+        self._map_holder = RelativeLayout(size_hint_y=1)
+        map_holder = self._map_holder
         self._map_page = mapview.MapPage(center=self._map_default_center(),
                                          zoom=14, embedded=True,
                                          on_pick=self._on_map_pick_embed,
@@ -1401,41 +1403,82 @@ class SwarmMobileApp(App):
             self._append_log('起飞失败：%s' % e)
 
     def _on_open_map(self):
-        """打开高德卫星地图：继承主地图当前中心+缩放+校准（两图同步），点击取点"""
+        """「全屏地图」：把主界面那个小地图（同一实例）整窗铺满；
+        再点「退出全屏」还原回任务航线页的小屏位置。
+        同一实例 → 中心/缩放/校准/航点/飞机标记天然同步，不再有第二个地图。"""
+        if getattr(self, '_map_full_on', False):
+            self._exit_full_map()
+            return
         mp = self._map_page
-        center = (mp._center if mp else (34.26, 108.94))
-        zoom = int(getattr(mp, '_zoom', 15) or 15)
-        calib = getattr(mp, '_calib', None)
-        gps_gcj = getattr(mp, 'gps_is_gcj', False)
-        full = mapview.MapPage(center=center, zoom=zoom,
-                               on_pick=self._on_map_pick,
-                               on_close=lambda: self._map_popup.dismiss(),
-                               gps_is_gcj=gps_gcj)
-        if calib:
-            full.set_calib(calib, note=getattr(mp, '_calib_from', ''))
-        # 同步主地图的航点/飞机标记层（独立实例上叠加，打开即一致）
+        layer = self._map_route_layer
+        holder = self._map_holder
+        if not getattr(self, 'root', None) or mp is None:
+            return
+        # ① 从任务航线页小屏容器里摘出来
         try:
-            layer = mapview._RouteLayer(full)
-            layer.size_hint = (1, 1)
-            if hasattr(self, '_map_route_layer'):
-                layer.set_route(self._map_route_layer._route)
-                layer.set_aircraft(self._map_route_layer._planes)
-            full.add_widget(layer)
-            self._full_layer = layer
+            if mp in holder.children:
+                holder.remove_widget(mp)
+            if layer in holder.children:
+                holder.remove_widget(layer)
         except Exception:
             pass
-        self._map_popup = Popup(
-            title='高德卫星地图 —— 点击任一点设为航点',
-            content=full,
-            size_hint=(0.98, 0.98))
-        self._map_popup.open()
+        # ② 铺到 root 顶层整窗覆盖（FloatLayout 全屏，地图先加、航线层在上）
+        full = FloatLayout()
+        mp.size_hint = (1, 1)
+        layer.size_hint = (1, 1)
+        full.add_widget(mp)
+        full.add_widget(layer)
+        # ③ 左上角「退出全屏」返回条（半透明深底圆角）
+        b_exit = RoundedButton(text='← 退出全屏', font_size='14sp',
+                               background_color=(0.12, 0.16, 0.2, 0.85),
+                               radius='8dp')
+        b_exit.size_hint = (None, None)
+        b_exit.size = ('92dp', '34dp')
+        b_exit.pos = (6, 6)
+        b_exit.bind(on_release=lambda _x: self._exit_full_map())
+        full.add_widget(b_exit)
+        self.root.add_widget(full)
+        self._map_full_layer = full
+        self._map_full_on = True
+        self._append_log('全屏地图：主界面地图已整窗铺满（同一实例，同步）—— 点「← 退出全屏」还原')
+
+    def _exit_full_map(self):
+        """还原：把地图与航线层放回任务航线页的小屏容器"""
+        if not getattr(self, '_map_full_on', False):
+            return
+        full = getattr(self, '_map_full_layer', None)
+        mp = self._map_page
+        layer = self._map_route_layer
+        holder = self._map_holder
+        try:
+            if full is not None:
+                if mp in full.children:
+                    full.remove_widget(mp)
+                if layer in full.children:
+                    full.remove_widget(layer)
+                self.root.remove_widget(full)
+        except Exception:
+            pass
+        try:
+            mp.size_hint = (1, 1)
+            layer.size_hint = (1, 1)
+            holder.add_widget(mp)
+            holder.add_widget(layer)
+        except Exception:
+            pass
+        self._map_full_on = False
+        self._map_full_layer = None
+        self._append_log('已退出全屏，地图还原到任务航线页小屏')
 
     def _on_map_pick(self, lat, lng):
         self._wp_lat.text = '%.6f' % lat
         self._wp_lon.text = '%.6f' % lng
         self._append_log('地图取点 %.6f, %.6f —— 填好高度后点「加航点」' % (lat, lng))
         try:
-            self._map_popup.dismiss()
+            if getattr(self, '_map_full_on', False):
+                self._exit_full_map()
+            elif getattr(self, '_map_popup', None):
+                self._map_popup.dismiss()
         except Exception:
             pass
 
