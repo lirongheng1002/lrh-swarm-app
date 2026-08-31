@@ -225,8 +225,13 @@ class SwarmMobileApp(App):
         self.fleet.on_mission_downloaded = self._on_mission_downloaded
         self.fleet.on_mission_uploaded = self._on_mission_uploaded
 
-        root = self._build_ui()
+        _main_box = self._build_ui()
+        # 最外层包 FloatLayout：全屏覆盖层 add 到它才真正盖住整窗
+        # （直接 add 到 BoxLayout 会变成普通一行；铁律：MapPage 容器也须 RelativeLayout）
+        root = FloatLayout()
+        root.add_widget(_main_box)
         self.root = root
+        self._main_box = _main_box
         Clock.schedule_interval(self._tick, 0.5)
         self._append_log('LRH 手机集群控制 v1.0 就绪 —— 填好服务器地址后点「连接」')
         return root
@@ -1429,7 +1434,8 @@ class SwarmMobileApp(App):
         full = FloatLayout()
         main_box = BoxLayout(orientation='vertical', spacing=0, padding=0)
         # 地图区（上半：size_hint_y=1 占满全部剩余高度；地图在下、航线层在上）
-        map_area = FloatLayout(size_hint_y=1)
+        # RelativeLayout 包裹 —— 铁律：MapPage 用 FloatLayout 瓦片会渲染错位/黑屏
+        map_area = RelativeLayout(size_hint_y=1)
         mp.size_hint = (1, 1)
         layer.size_hint = (1, 1)
         map_area.add_widget(mp)
