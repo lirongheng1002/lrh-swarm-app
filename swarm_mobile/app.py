@@ -1512,16 +1512,33 @@ class SwarmMobileApp(App):
         map_area.add_widget(layer)
         main_box.add_widget(map_area)
         # 下半固定区只两行（领导 2026-09-02 定稿）：坐标状态栏(上，双击切目标机) + 最底功能按钮横铺一行。
-        #   任务表不进全屏（留在主界面任务航线页原位；领导：不要那一堆编辑框/重叠）
+        #   任务表/主界面输入框都不进全屏（留在主界面原位；领导：不要那一堆编辑框/重叠）
         bottom_bar = BoxLayout(orientation='vertical', spacing=1,
                                size_hint_y=None, height='82dp')
-        wp_row = getattr(self, '_wp_row', None)
-        if wp_row is not None:
-            try:
-                wp_row.parent.remove_widget(wp_row)
-            except Exception:
-                pass
-            bottom_bar.add_widget(wp_row)       # 上：坐标状态栏（双击切目标机）
+        # 上：坐标状态栏——纯显示（目标机/纬度/经度/高度），双击=切换目标机，无输入框
+        stat = BoxLayout(orientation='horizontal', spacing=4, size_hint_y=None, height='40dp')
+        lbl_tgt = Label(text=self._sp_tgt.text, font_size='16sp', bold=True,
+                        color=(0.95, 0.6, 0.25, 1), size_hint_x=0.3,
+                        halign='left', valign='middle')
+        lbl_lat = Label(text='纬度 --', font_size='14sp', color=(0.72, 0.85, 0.72, 1),
+                        size_hint_x=0.25, halign='left', valign='middle')
+        lbl_lon = Label(text='经度 --', font_size='14sp', color=(0.72, 0.85, 0.72, 1),
+                        size_hint_x=0.25, halign='left', valign='middle')
+        lbl_alt = Label(text='高度 --m', font_size='14sp', color=(0.9, 0.82, 0.6, 1),
+                        size_hint_x=0.2, halign='right', valign='middle')
+        for _w in (lbl_tgt, lbl_lat, lbl_lon, lbl_alt):
+            stat.add_widget(_w)
+        def _dbl_stat(inst, touch):
+            if not stat.collide_point(*touch.pos):
+                return False
+            if getattr(touch, 'is_double_tap', False):
+                self._pick_aircraft()
+                return True
+            return False
+        stat.bind(on_touch_down=_dbl_stat)
+        bottom_bar.add_widget(stat)             # 上：坐标状态栏（双击切目标机）
+        self._full_stat_lbls = (lbl_tgt, lbl_lat, lbl_lon, lbl_alt)
+        self._refresh_full_stat()
         # 最底：功能按钮 7 键一行横铺
         act = BoxLayout(orientation='horizontal', spacing=2,
                         size_hint_y=None, height='40dp')
@@ -1583,18 +1600,16 @@ class SwarmMobileApp(App):
             holder.add_widget(layer)
         except Exception:
             pass
-        # 还原坐标行到三行容器 B 的头部（rt 原本在 r3/r1 之前：
-        # B = [坐标行, 全屏地图行, 上传行] 1-2-3；Kivy add index=0 是追加末尾，
-        # 直接 append 会变成 [r3, r1, rt] = 231 —— 所以显式重排）
+        # 还原坐标行到三行容器 B 的头部（仅当主界面坐标行确实被全屏摘过才重排还原；
+        # 现在全屏是纯显示状态栏、不摘主界面输入框行 → 此处直接跳过，主界面完全不动）
         try:
             wp_row = getattr(self, '_wp_row', None)
             rows = getattr(self, '_mission_rows', None)
             r3b = getattr(self, '_mission_btn_r3', None)
             r1b = getattr(self, '_mission_btn_r1', None)
-            if wp_row is not None and wp_row.parent:
-                wp_row.parent.remove_widget(wp_row)
-            if rows is not None:
-                # 取出 B 里剩余按钮行，按 1-2-3 顺序重放
+            if wp_row is not None and rows is not None and wp_row.parent is not rows:
+                if wp_row.parent:
+                    wp_row.parent.remove_widget(wp_row)
                 for w in (r3b, r1b):
                     if w is not None and w.parent:
                         w.parent.remove_widget(w)
@@ -1629,6 +1644,26 @@ class SwarmMobileApp(App):
             _CK.schedule_once(lambda _dt: self._map_page._rebuild(), 0.1)
         except Exception:
             pass
+
+    def _refresh_full_stat(self):
+        """全屏坐标状态栏刷为当前目标机（_tick 每 0.5s 调）"""
+        if not getattr(self, '_map_full_on', False):
+            return
+        lbls = getattr(self, '_full_stat_lbls', None)
+        if not lbls:
+            return
+        tgt_l, lat_l, lon_l, alt_l = lbls
+        tgt_l.text = getattr(self, '_sp_tgt', None).text if getattr(self, '_sp_tgt', None) else '--'
+        sid = self._mission_sysid()
+        v = self.fleet.vehicle(sid) if hasattr(self.fleet, 'vehicle') else None
+        if v is not None and getattr(v, 'lat', None) and abs(v.lat) > 1:
+            lat_l.text = '纬度 %.6f' % v.lat
+            lon_l.text = '经度 %.6f' % v.lon
+            alt_l.text = '高度 %sm' % (getattr(v, 'rel_alt', None) or '--')
+        else:
+            lat_l.text = '纬度 --'
+            lon_l.text = '经度 --'
+            alt_l.text = '高度 --m'
 
     def _on_map_pick(self, lat, lng):
         self._wp_lat.text = '%.6f' % lat
@@ -1896,6 +1931,7 @@ class SwarmMobileApp(App):
         self._refresh_satellites()
         self._refresh_single_state()
         self._refresh_map_aircraft()
+        self._refresh_full_stat()   # 全屏坐标状态栏实时更新（仅全屏时生效）
         if self.fleet.connected and self._btn_conn.text != '断开':
             self._btn_conn.text = '断开'
 
